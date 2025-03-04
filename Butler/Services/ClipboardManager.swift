@@ -19,8 +19,11 @@ class ClipboardManager {
     private var previousContent: String?
     
     func getSelectedText() throws -> String {
+        print("Attempting to get selected text")
+        
         // Save current clipboard content
         previousContent = pasteboard.string(forType: .string)
+        print("Saved previous clipboard content: \(previousContent?.prefix(20) ?? "none")")
         
         // Simulate copy command
         let source = CGEventSource(stateID: .privateState)
@@ -30,6 +33,7 @@ class ClipboardManager {
         keyDown?.flags = .maskCommand
         keyUp?.flags = .maskCommand
         
+        print("Simulating CMD+C to capture selection")
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
         
@@ -37,21 +41,27 @@ class ClipboardManager {
         Thread.sleep(forTimeInterval: 0.1)
         
         guard let selectedText = pasteboard.string(forType: .string) else {
+            print("No text found in clipboard")
             // Restore previous clipboard content
             if let previous = previousContent {
                 pasteboard.clearContents()
                 pasteboard.setString(previous, forType: .string)
+                print("Restored previous clipboard content")
             }
             throw ClipboardError.noTextSelected
         }
         
+        print("Successfully captured text: \(selectedText.prefix(50))...")
         return selectedText
     }
     
     func replaceSelectedText(with newText: String) throws {
+        print("Attempting to replace text with new content (length: \(newText.count))")
+        
         // Store new text in clipboard
         pasteboard.clearContents()
         pasteboard.setString(newText, forType: .string)
+        print("New text stored in clipboard")
         
         // Simulate paste command
         let source = CGEventSource(stateID: .privateState)
@@ -61,6 +71,7 @@ class ClipboardManager {
         keyDown?.flags = .maskCommand
         keyUp?.flags = .maskCommand
         
+        print("Simulating CMD+V to paste improved text")
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
         
@@ -71,6 +82,9 @@ class ClipboardManager {
         if let previous = previousContent {
             pasteboard.clearContents()
             pasteboard.setString(previous, forType: .string)
+            print("Restored previous clipboard content")
         }
+        
+        print("Text replacement complete")
     }
 }

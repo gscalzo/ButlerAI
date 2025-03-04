@@ -1,14 +1,11 @@
 import SwiftUI
 import AppKit
-import OSLog
-
-let logger = Logger(subsystem: "com.butler.app", category: "main")
 
 class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onClose: () -> Void = {}
     
     func windowWillClose(_ notification: Notification) {
-        logger.info("Settings window will close")
+        print("Settings window closed")
         onClose()
     }
 }
@@ -22,7 +19,7 @@ class AppState: ObservableObject {
     
     @Published var isSettingsOpen = false {
         didSet {
-            logger.info("Settings window state changed: \(self.isSettingsOpen)")
+            print("Settings window state: \(self.isSettingsOpen)")
             if self.isSettingsOpen {
                 self.showSettings()
             }
@@ -31,7 +28,7 @@ class AppState: ObservableObject {
     @Published var lastError: String? {
         didSet {
             if let error = self.lastError {
-                logger.error("Error occurred: \(error)")
+                print("Error: \(error)")
             }
         }
     }
@@ -46,20 +43,20 @@ class AppState: ObservableObject {
     }
     
     init() {
-        logger.info("Initializing AppState")
+        print("Initializing Butler")
         self.updateOpenAIService()
         self.setupHotkeyManager()
     }
     
     private func updateOpenAIService() {
         openAIService = OpenAIService(apiKey: openaiKey, prompt: improvementPrompt)
-        logger.info("OpenAI service updated")
+        print("OpenAI service updated (API Key length: \(openaiKey.count))")
     }
     
     private func setupHotkeyManager() {
-        logger.info("Setting up hotkey manager")
+        print("Setting up hotkey (⌃⌥⌘C)")
         hotkeyManager = HotkeyManager { [weak self] in
-            logger.info("Hotkey triggered")
+            print("Hotkey triggered")
             Task { [weak self] in
                 await self?.improveSelectedText()
             }
@@ -67,11 +64,12 @@ class AppState: ObservableObject {
     }
     
     private func showSettings() {
-        logger.info("Showing settings window")
+        print("Showing settings window")
         
         if let controller = settingsWindowController {
             controller.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            print("Reusing existing settings window")
             return
         }
         
@@ -87,6 +85,7 @@ class AppState: ObservableObject {
         
         let controller = SettingsWindowController(window: window)
         controller.onClose = { [weak self] in
+            print("Settings window will be cleaned up")
             self?.settingsWindowController = nil
             self?.isSettingsOpen = false
         }
@@ -99,14 +98,14 @@ class AppState: ObservableObject {
         controller.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         
-        logger.info("Settings window created and shown")
+        print("New settings window created and shown")
     }
     
     private func improveSelectedText() async {
-        logger.info("Attempting to improve selected text")
+        print("Starting text improvement")
         do {
             let selectedText = try clipboardManager.getSelectedText()
-            logger.info("Got selected text: \(selectedText.prefix(20))...")
+            print("Selected text: \(selectedText.prefix(50))...")
             
             guard let improved = try await openAIService?.improveText(selectedText) else {
                 lastError = "OpenAI API key not configured"
@@ -123,12 +122,13 @@ class AppState: ObservableObject {
                 }
                 return
             }
-            logger.info("Received improved text from OpenAI")
+            print("Received improved text from OpenAI")
             
             try clipboardManager.replaceSelectedText(with: improved)
-            logger.info("Successfully replaced text")
+            print("Successfully replaced text")
             lastError = nil
         } catch let error as OpenAIError {
+            print("OpenAI error: \(error.localizedDescription)")
             lastError = error.localizedDescription
             let alert = NSAlert()
             alert.messageText = "OpenAI Error"
@@ -138,6 +138,7 @@ class AppState: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
         } catch let error as ClipboardManager.ClipboardError {
+            print("Clipboard error: \(error.localizedDescription)")
             lastError = error.localizedDescription
             let alert = NSAlert()
             alert.messageText = "No Text Selected"
@@ -147,6 +148,7 @@ class AppState: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
         } catch {
+            print("Unexpected error: \(error)")
             lastError = "An unexpected error occurred"
         }
     }
@@ -229,6 +231,7 @@ struct ButlerApp: App {
                 }
                 
                 Button("Settings...") {
+                    print("Opening settings from menu")
                     appState.isSettingsOpen = true
                 }
                 .keyboardShortcut(",")
