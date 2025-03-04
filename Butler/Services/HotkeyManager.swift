@@ -1,10 +1,13 @@
 import Foundation
 import Carbon
 import AppKit
+import OSLog
 
 class HotkeyManager {
     private var eventHandler: EventHandlerRef?
+    private var monitorEvent: Any?
     private let callback: () -> Void
+    private let logger = Logger(subsystem: "com.butler.app", category: "hotkey")
     
     init(callback: @escaping () -> Void) {
         self.callback = callback
@@ -12,67 +15,40 @@ class HotkeyManager {
     }
     
     deinit {
+        logger.info("HotkeyManager deinit")
         if let handler = eventHandler {
             RemoveEventHandler(handler)
+        }
+        if let monitor = monitorEvent {
+            NSEvent.removeMonitor(monitor)
         }
     }
     
     private func registerHotkey() {
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: OSType(kEventHotKeyPressed)
-        )
+        logger.info("Starting hotkey registration")
         
-        // Create handler
-        let selfPtr = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
-        let handlerCallback: EventHandlerUPP = { _, eventRef, userData in
-            guard let eventRef = eventRef else { return OSStatus(eventNotHandledErr) }
-            
-            var hotkeyID = EventHotKeyID()
-            let status = GetEventParameter(
-                eventRef,
-                EventParamName(kEventParamDirectObject),
-                EventParamType(typeEventHotKeyID),
-                nil,
-                MemoryLayout<EventHotKeyID>.size,
-                nil,
-                &hotkeyID
-            )
-            
-            guard status == noErr else { return status }
-            
-            if hotkeyID.id == 1 {
-                let selfObject = Unmanaged<HotkeyManager>.fromOpaque(userData!).takeUnretainedValue()
-                DispatchQueue.main.async {
-                    selfObject.callback()
-                }
-            }
-            
-            return noErr
+        // Request accessibility permissions if needed
+        if !AXIsProcessTrusted() {
+            logger.warning("App is not trusted for accessibility")
+            let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+            AXIsProcessTrustedWithOptions(options)
+        } else {
+            logger.info("App is trusted for accessibility")
         }
         
-        // Install handler
-        InstallEventHandler(
-            GetApplicationEventTarget(),
-            handlerCallback,
-            1,
-            &eventType,
-            selfPtr,
-            &eventHandler
-        )
+        // Set up monitoring of global keyboard events
+        monitorEvent = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return }
+            
+            if event.modifierFlags.contains([.control, .option, .command]) &&
+               event.keyCode == 0x08 { // 'c' key
+                self.logger.info("Global keyboard shortcut detected")
+                DispatchQueue.main.async {
+                    self.callback()
+                }
+            }
+        }
         
-        // Register hotkey (Control + Option + Command + C)
-        var hotkeyID = EventHotKeyID(signature: OSType(0x4275746C), // "Butl"
-                                    id: 1)
-        var hotKeyRef: EventHotKeyRef?
-        
-        RegisterEventHotKey(
-            UInt32(kVK_ANSI_C),
-            UInt32(controlKey | optionKey | cmdKey),
-            hotkeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
+        logger.info("Global event monitor setup complete")
     }
 }

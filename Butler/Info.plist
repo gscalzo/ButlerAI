@@ -6,5 +6,13 @@
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Butler needs accessibility access to monitor keyboard shortcuts and improve selected text.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Butler needs accessibility access to monitor keyboard shortcuts and improve selected text.</string>
+    <key>CFBundleDocumentTypes</key>
+    <array/>
+    <key>NSServices</key>
+    <array/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
 </dict>
 </plist>
