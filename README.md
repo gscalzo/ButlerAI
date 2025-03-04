@@ -1,4 +1,29 @@
-# ButlerAI - Your Text Enhancement Assistant 🎩✨
+<div align="center">
+
+```
+ ______           _    _             _____  _____ 
+|  _  \         | |  | |           |  _  ||_   _|
+| | | |_   _  __| |_ | | ___ _ __  | |/' |  | |  
+| | | | | | |/ _` | || |/ _ \ '__| |  /| |  | |  
+| |_| | |_| | (_| |\   /  __/ |    \ |_/ / _| |_ 
+\____/ \__,_|\__,_| \_/ \___|_|     \___/  \___/ 
+```
+
+<img src="appstore.png" width="128" height="128" style="border-radius: 20%; box-shadow: 0 8px 16px rgba(0,0,0,0.1);">
+
+### _Elevate Your Writing with AI Precision_ ✨
+
+</div>
+
+<p align="center">
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#examples">Examples</a> •
+  <a href="#support--feedback">Support</a>
+</p>
+
+# ButlerAI - Your Text Enhancement Assistant 🎩
 
 ButlerAI is an elegant macOS menubar application that helps you improve your writing with the power of AI. Just select any text, press a shortcut, and watch as your text is refined and enhanced.
 
@@ -85,4 +110,10 @@ Found a bug or have a feature request? Please open an issue!
 
 ---
 
-<p align="center">Made with ❤️ for writers everywhere</p>
+<div align="center">
+
+<img src="appstore.png" width="64" height="64" style="border-radius: 16px; margin: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+
+_Made with ❤️ for writers everywhere_
+
+</div>
