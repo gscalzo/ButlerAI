@@ -35,5 +35,7 @@
     </dict>
     <key>CFBundleDisplayName</key>
     <string>ButlerAI</string>
+    <key>NSPasteboardUsageDescription</key>
+    <string>ButlerAI needs access to your clipboard to improve selected text.</string>
 </dict>
 </plist>

@@ -1,12 +1,12 @@
 <div align="center">
 
 ```
- ______           _    _             _____  _____ 
-|  _  \         | |  | |           |  _  ||_   _|
-| | | |_   _  __| |_ | | ___ _ __  | |/' |  | |  
-| | | | | | |/ _` | || |/ _ \ '__| |  /| |  | |  
-| |_| | |_| | (_| |\   /  __/ |    \ |_/ / _| |_ 
-\____/ \__,_|\__,_| \_/ \___|_|     \___/  \___/ 
+__________        __  .__                  _____  .___ 
+\______   \__ ___/  |_|  |   ___________  /  _  \ |   |
+ |    |  _/  |  \   __\  | _/ __ \_  __ \/  /_\  \|   |
+ |    |   \  |  /|  | |  |_\  ___/|  | \/    |    \   |
+ |______  /____/ |__| |____/\___  >__|  \____|__  /___|
+        \/                      \/              \/      
 ```
 
 <img src="appstore.png" width="128" height="128" style="border-radius: 20%; box-shadow: 0 8px 16px rgba(0,0,0,0.1);">
@@ -61,14 +61,22 @@ ButlerAI is an elegant macOS menubar application that helps you improve your wri
 
 ## Examples 🎯
 
-Before:
+Regular text improvement:
 ```
 i think that this sentence could use some work because its not very good written
 ```
-
-After:
+↓
 ```
 I believe this sentence could be improved as it contains several grammatical errors and lacks clarity.
+```
+
+AI instruction improvement:
+```
+tell me a story about a dragon that lives in SF and works as a software engineer
+```
+↓
+```
+Please write a story about a dragon residing in San Francisco who works as a software engineer.
 ```
 
 ## Error Messages 🔍
