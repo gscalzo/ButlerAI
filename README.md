@@ -1,6 +1,6 @@
-# Butler - Your Text Enhancement Assistant 🎩✨
+# ButlerAI - Your Text Enhancement Assistant 🎩✨
 
-Butler is an elegant macOS menubar application that helps you improve your writing with the power of AI. Just select any text, press a shortcut, and watch as your text is refined and enhanced.
+ButlerAI is an elegant macOS menubar application that helps you improve your writing with the power of AI. Just select any text, press a shortcut, and watch as your text is refined and enhanced.
 
 ## Features 🌟
 
@@ -13,8 +13,8 @@ Butler is an elegant macOS menubar application that helps you improve your writi
 ## Installation 🚀
 
 1. Download the latest release from the Releases page
-2. Move Butler.app to your Applications folder
-3. Launch Butler
+2. Move ButlerAI.app to your Applications folder
+3. Launch ButlerAI
 4. Configure your OpenAI API key in settings
 
 ## Setup ⚙️
@@ -48,7 +48,7 @@ I believe this sentence could be improved as it contains several grammatical err
 
 ## Error Messages 🔍
 
-Butler provides clear feedback when something goes wrong:
+ButlerAI provides clear feedback when something goes wrong:
 - Missing API key notifications
 - No text selected warnings
 - Network connectivity issues

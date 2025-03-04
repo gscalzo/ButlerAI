@@ -43,7 +43,7 @@ class AppState: ObservableObject {
     }
     
     init() {
-        print("Initializing Butler")
+        print("Initializing ButlerAI")
         self.updateOpenAIService()
         self.setupHotkeyManager()
     }
@@ -80,7 +80,7 @@ class AppState: ObservableObject {
             defer: false
         )
         
-        window.title = "Butler Settings"
+        window.title = "ButlerAI Settings"
         window.center()
         
         let controller = SettingsWindowController(window: window)
@@ -111,7 +111,7 @@ class AppState: ObservableObject {
                 lastError = "OpenAI API key not configured"
                 let alert = NSAlert()
                 alert.messageText = "OpenAI API Key Required"
-                alert.informativeText = "Please open Settings and enter your OpenAI API key to use Butler."
+                alert.informativeText = "Please open Settings and enter your OpenAI API key to use ButlerAI."
                 alert.alertStyle = .warning
                 alert.addButton(withTitle: "Open Settings")
                 alert.addButton(withTitle: "Cancel")
@@ -212,7 +212,7 @@ struct ButlerApp: App {
             VStack(spacing: 0) {
                 HStack {
                     Image(systemName: "wand.and.stars")
-                    Text("Butler")
+                    Text("ButlerAI")
                         .font(.headline)
                 }
                 .padding(.vertical, 8)
@@ -237,7 +237,7 @@ struct ButlerApp: App {
                 .keyboardShortcut(",")
                 .padding(.vertical, 4)
                 
-                Button("Quit Butler") {
+                Button("Quit ButlerAI") {
                     NSApplication.shared.terminate(nil)
                 }
                 .keyboardShortcut("q")

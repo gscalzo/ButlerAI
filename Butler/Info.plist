@@ -5,9 +5,9 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Butler needs accessibility access to monitor keyboard shortcuts and improve selected text.</string>
+    <string>ButlerAI needs accessibility access to monitor keyboard shortcuts and improve selected text.</string>
     <key>NSAccessibilityUsageDescription</key>
-    <string>Butler needs accessibility access to monitor keyboard shortcuts and improve selected text.</string>
+    <string>ButlerAI needs accessibility access to monitor keyboard shortcuts and improve selected text.</string>
     <key>CFBundleDocumentTypes</key>
     <array/>
     <key>NSServices</key>
@@ -33,5 +33,7 @@
             </dict>
         </dict>
     </dict>
+    <key>CFBundleDisplayName</key>
+    <string>ButlerAI</string>
 </dict>
 </plist>
