@@ -5,7 +5,7 @@
     <key>method</key>
     <string>developer-id</string>
     <key>teamID</key>
-    <string>$(DEVELOPMENT_TEAM)</string>
+    <string>$TEAM_ID</string>
     <key>signingStyle</key>
     <string>manual</string>
     <key>signingCertificate</key>
