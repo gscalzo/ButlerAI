@@ -13,10 +13,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Verify Xcode Version
+      - name: Select and Verify Xcode 16.2
         run: |
+          sudo xcode-select -s /Applications/Xcode_16.2.app
           xcodebuild -version
           echo "Using Xcode at: $(xcode-select -p)"
+          
+          # Verify we're using Xcode 16.2
+          XCODE_VERSION=$(xcodebuild -version | head -n 1 | awk '{ print $2 }')
+          if [ "$XCODE_VERSION" != "16.2.0" ]; then
+            echo "Error: Expected Xcode 16.2.0 but got $XCODE_VERSION"
+            exit 1
+          fi
 
       - name: Install the Apple certificate
         env:

@@ -122,6 +122,7 @@ Built with:
 - AppKit Integration
 - OpenAI API / Ollama Integration
 - Secure Networking
+- Xcode 16.2.0 (required for builds)
 
 ### Building Releases
 
@@ -160,6 +161,6 @@ Found a bug or have a feature request? Please open an issue!
 
 <img src="appstore.png" width="64" height="64" style="border-radius: 16px; margin: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
 
-_Made with ❤️ for writers everywhere_
+_Made with ❤️ by Cline and an amazed human_ ✨
 
 </div>
