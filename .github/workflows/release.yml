@@ -7,11 +7,16 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Verify Xcode Version
+        run: |
+          xcodebuild -version
+          echo "Using Xcode at: $(xcode-select -p)"
 
       - name: Install the Apple certificate
         env:
@@ -39,12 +44,27 @@ jobs:
         env:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
           APPLE_DEVELOPER_PASSWORD: ${{ secrets.APPLE_DEVELOPER_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
-          # Build the app
-          xcodebuild -project Butler.xcodeproj -scheme Butler -configuration Release -archivePath $RUNNER_TEMP/Butler.xcarchive archive
+          # Build the app (with detailed logging)
+          xcodebuild -project Butler.xcodeproj \
+            -scheme Butler \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/Butler.xcarchive \
+            archive \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            CODE_SIGN_STYLE=Manual \
+            -verbose
 
-          # Export archive to app
-          xcodebuild -exportArchive -archivePath $RUNNER_TEMP/Butler.xcarchive -exportPath $RUNNER_TEMP/export -exportOptionsPlist ExportOptions.plist
+          # Export archive to app (with detailed logging)
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/Butler.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist ExportOptions.plist \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            -verbose
 
           # Create DMG
           hdiutil create -volname "ButlerAI" -srcfolder $RUNNER_TEMP/export/Butler.app -ov -format UDZO $RUNNER_TEMP/ButlerAI.dmg

@@ -123,6 +123,29 @@ Built with:
 - OpenAI API / Ollama Integration
 - Secure Networking
 
+### Building Releases
+
+Releases are automatically built and signed when pushing version tags:
+
+1. **Required Secrets**:
+   - `CERTIFICATE_BASE64`: Developer ID Application certificate
+   - `CERTIFICATE_PASSWORD`: Certificate export password
+   - `APPLE_DEVELOPER_ID`: Apple ID email
+   - `APPLE_DEVELOPER_PASSWORD`: App-specific password
+   - `TEAM_ID`: Apple Developer Team ID
+
+2. **Creating a Release**:
+   ```bash
+   git tag v1.0.0  # Use appropriate version
+   git push origin v1.0.0
+   ```
+
+The GitHub Action will automatically:
+- Build the app
+- Sign with Developer ID
+- Create notarized DMG
+- Create GitHub release
+
 ## License 📄
 
 MIT License - See LICENSE file for details
