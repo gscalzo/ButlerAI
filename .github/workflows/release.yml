@@ -17,14 +17,18 @@ jobs:
 
       - name: Select and Verify Xcode 16.2
         run: |
+          # Define log tag function
+          log() { echo "[BUTLER] $1"; }
+          
+          log "Selecting Xcode version..."
           sudo xcode-select -s /Applications/Xcode_16.2.app
           xcodebuild -version
-          echo "Using Xcode at: $(xcode-select -p)"
+          log "Using Xcode at: $(xcode-select -p)"
           
           # Verify we're using Xcode 16.2
           XCODE_VERSION=$(xcodebuild -version | head -n 1 | awk '{ print $2 }')
           if [ "$XCODE_VERSION" != "16.2" ]; then
-            echo "Error: Expected Xcode 16.2 but got $XCODE_VERSION"
+            log "Error: Expected Xcode 16.2 but got $XCODE_VERSION"
             exit 1
           fi
 
@@ -34,21 +38,86 @@ jobs:
           P12_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ github.run_id }}
         run: |
-          # Create variables
+          # Define log tag function
+          log() { echo "[BUTLER] $1"; }
+
+          log "Setting up keychain..."
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Import certificate from secrets
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          # Decode the certificate
+          log "Decoding certificate to $CERTIFICATE_PATH..."
+          if echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH; then
+              log "Certificate decoded successfully"
+              log "Certificate file size: $(stat -f%z "$CERTIFICATE_PATH") bytes"
+          else
+              log "Error: Failed to decode certificate"
+              exit 1
+          fi
           
           # Create temporary keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          log "Creating keychain at $KEYCHAIN_PATH..."
+          if security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH; then
+              log "Keychain created successfully"
+              log "Setting keychain timeout to 6 hours..."
+              security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          else
+              log "Error: Failed to create keychain"
+              exit 1
+          fi
           
-          # Import certificate to keychain
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
+          # Set keychain as default
+          log "Setting as default keychain..."
+          if security default-keychain -s $KEYCHAIN_PATH; then
+              log "Default keychain set successfully"
+              log "Unlocking keychain..."
+              security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          else
+              log "Error: Failed to set default keychain"
+              exit 1
+          fi
+          
+          # Import certificate
+          log "Importing certificate to keychain..."
+          if security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH; then
+              log "Certificate imported successfully"
+          else
+              log "Error: Failed to import certificate"
+              exit 1
+          fi
+          
+          # Set partition list
+          log "Setting partition list for codesigning..."
+          if security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH; then
+              log "Partition list set successfully"
+          else
+              log "Error: Failed to set partition list"
+              exit 1
+          fi
+          
+          # Add to keychain list
+          log "Adding to system keychain list..."
+          if security list-keychain -d user -s $KEYCHAIN_PATH; then
+              log "Keychain added to system list successfully"
+          else
+              log "Error: Failed to add keychain to system list"
+              exit 1
+          fi
+          
+          # Verify certificate is properly installed
+          log "Verifying certificate installation..."
+          log "Listing available signing identities:"
+          if security find-identity -v -p codesigning $KEYCHAIN_PATH; then
+              if security find-identity -v -p codesigning | grep "Developer ID Application"; then
+                  log "Developer ID Application certificate found and ready"
+              else
+                  log "Error: Developer ID Application certificate not found in keychain"
+                  exit 1
+              fi
+          else
+              log "Error: Failed to list signing identities"
+              exit 1
+          fi
 
       - name: Build and archive
         env:
@@ -56,8 +125,13 @@ jobs:
           APPLE_DEVELOPER_PASSWORD: ${{ secrets.APPLE_DEVELOPER_PASSWORD }}
           TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
+          # Define log tag function
+          log() { echo "[BUTLER] $1"; }
+          
           # Build the app (with detailed logging)
-          xcodebuild -project Butler.xcodeproj \
+          log "Starting app build..."
+          log "Archive path: $RUNNER_TEMP/Butler.xcarchive"
+          if xcodebuild -project Butler.xcodeproj \
             -scheme Butler \
             -configuration Release \
             -archivePath $RUNNER_TEMP/Butler.xcarchive \
@@ -65,23 +139,66 @@ jobs:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CODE_SIGN_IDENTITY="Developer ID Application" \
             CODE_SIGN_STYLE=Manual \
-            -verbose
+            -verbose; then
+              log "App build completed successfully"
+              log "Archive size: $(du -sh $RUNNER_TEMP/Butler.xcarchive | cut -f1)"
+          else
+              log "Error: App build failed"
+              exit 1
+          fi
 
           # Export archive to app (with detailed logging)
-          xcodebuild -exportArchive \
+          log "Exporting archive to app..."
+          log "Export path: $RUNNER_TEMP/export"
+          if xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/Butler.xcarchive \
             -exportPath $RUNNER_TEMP/export \
             -exportOptionsPlist ExportOptions.plist \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CODE_SIGN_IDENTITY="Developer ID Application" \
-            -verbose
+            -verbose; then
+              log "Archive exported successfully"
+              log "App size: $(du -sh $RUNNER_TEMP/export/Butler.app | cut -f1)"
+          else
+              log "Error: Archive export failed"
+              exit 1
+          fi
 
           # Create DMG
-          hdiutil create -volname "ButlerAI" -srcfolder $RUNNER_TEMP/export/Butler.app -ov -format UDZO $RUNNER_TEMP/ButlerAI.dmg
+          log "Creating DMG..."
+          if hdiutil create -volname "ButlerAI" -srcfolder $RUNNER_TEMP/export/Butler.app -ov -format UDZO $RUNNER_TEMP/ButlerAI.dmg; then
+              log "DMG created successfully"
+              log "DMG size: $(du -sh $RUNNER_TEMP/ButlerAI.dmg | cut -f1)"
+          else
+              log "Error: DMG creation failed"
+              exit 1
+          fi
 
           # Sign and notarize DMG
-          xcrun notarytool submit $RUNNER_TEMP/ButlerAI.dmg --apple-id "$APPLE_DEVELOPER_ID" --password "$APPLE_DEVELOPER_PASSWORD" --team-id "$(security find-identity -v -p codesigning | grep "Developer ID" | cut -d '"' -f 2 | cut -d '(' -f 2 | cut -d ')' -f 1)" --wait
-          xcrun stapler staple $RUNNER_TEMP/ButlerAI.dmg
+          log "Submitting DMG for notarization..."
+          TEAM_ID_FROM_CERT=$(security find-identity -v -p codesigning | grep "Developer ID" | cut -d '"' -f 2 | cut -d '(' -f 2 | cut -d ')' -f 1)
+          log "Using Team ID: $TEAM_ID_FROM_CERT"
+          
+          if xcrun notarytool submit $RUNNER_TEMP/ButlerAI.dmg --apple-id "$APPLE_DEVELOPER_ID" --password "$APPLE_DEVELOPER_PASSWORD" --team-id "$TEAM_ID_FROM_CERT" --wait; then
+              log "DMG notarization submitted successfully"
+              log "Stapling DMG..."
+              if xcrun stapler staple $RUNNER_TEMP/ButlerAI.dmg; then
+                  log "DMG stapling completed successfully"
+                  log "Final DMG size: $(du -sh $RUNNER_TEMP/ButlerAI.dmg | cut -f1)"
+              else
+                  log "Error: DMG stapling failed"
+                  exit 1
+              fi
+          else
+              log "Error: DMG notarization failed"
+              exit 1
+          fi
+
+      - name: Log Release Creation
+        run: |
+          # Define log tag function
+          log() { echo "[BUTLER] $1"; }
+          log "Creating GitHub release..."
 
       - name: Create Release
         id: create_release
@@ -93,6 +210,12 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
+
+      - name: Log Upload
+        run: |
+          # Define log tag function
+          log() { echo "[BUTLER] $1"; }
+          log "Uploading DMG to release..."
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
