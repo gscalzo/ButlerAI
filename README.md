@@ -30,7 +30,7 @@ ButlerAI is an elegant macOS menubar application that helps you improve your wri
 ## Features 🌟
 
 - **Global Keyboard Shortcut** (⌃⌥⌘C) - Improve text anywhere, in any application
-- **AI-Powered Enhancement** - Using OpenAI's gpt-4o-mini model for intelligent text improvements
+- **AI-Powered Enhancement** - Choose between OpenAI's API or local Ollama models for intelligent text improvements
 - **Seamless Integration** - Lives in your menubar for quick access
 - **Original Context Preservation** - Maintains the original meaning and tone while improving clarity
 - **Clipboard Protection** - Preserves your clipboard content during operations
@@ -47,7 +47,17 @@ ButlerAI is an elegant macOS menubar application that helps you improve your wri
 1. **First Launch**:
    - Click the wand icon (✨) in your menubar
    - Open Settings
-   - Enter your OpenAI API key
+   - Choose your preferred AI backend:
+
+     **OpenAI Setup**:
+     - Enter your OpenAI API key
+     - Select a model (default: gpt-4o-mini)
+
+     **Ollama Setup**:
+     - [Install Ollama](https://ollama.ai/download)
+     - Select Ollama as your backend
+     - Configure Ollama server URL (default: http://localhost:11434)
+     - Choose from available local models
 
 2. **Required Permissions**:
    - Grant Accessibility permissions when prompted
@@ -90,13 +100,17 @@ ButlerAI provides clear feedback when something goes wrong:
 ## Requirements 📋
 
 - macOS 12.0 or later
-- OpenAI API key
-- Internet connection
+- One of the following:
+  - OpenAI API key (for OpenAI backend)
+  - Ollama installation (for local AI backend)
+- Internet connection (for OpenAI backend only)
 
 ## Privacy & Security 🔒
 
-- All text processing happens through OpenAI's secure API
-- No data is stored locally
+- Text processing can happen either:
+  - Through OpenAI's secure API
+  - Locally using Ollama (complete privacy, no data leaves your machine)
+- No data is stored permanently
 - Your clipboard content is preserved
 - API key is stored securely in macOS keychain
 
@@ -105,7 +119,7 @@ ButlerAI provides clear feedback when something goes wrong:
 Built with:
 - SwiftUI
 - AppKit Integration
-- OpenAI API
+- OpenAI API / Ollama Integration
 - Secure Networking
 
 ## License 📄

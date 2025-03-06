@@ -34,7 +34,16 @@ class AppState: ObservableObject {
     }
     
     @AppStorage("openaiKey") var openaiKey: String = "" {
-        didSet { self.updateOpenAIService() }
+        didSet { self.updateAIService() }
+    }
+    @AppStorage("aiBackend") var aiBackend: String = "openai" {
+        didSet { self.updateAIService() }
+    }
+    @AppStorage("ollamaURL") var ollamaURL: String = "http://localhost:11434" {
+        didSet { self.updateAIService() }
+    }
+    @AppStorage("selectedModel") var selectedModel: String = "gpt-4o-mini" {
+        didSet { self.updateAIService() }
     }
     @AppStorage("improvementPrompt") var improvementPrompt: String = """
     Please improve the English in the following text while keeping its original meaning and tone. Focus on:
@@ -50,18 +59,25 @@ class AppState: ObservableObject {
 
     Return only the improved text without any explanations or additional comments.
     """ {
-        didSet { self.updateOpenAIService() }
+        didSet { self.updateAIService() }
     }
     
     init() {
         print("Initializing ButlerAI")
-        self.updateOpenAIService()
+        self.updateAIService()
         self.setupHotkeyManager()
     }
     
-    private func updateOpenAIService() {
-        openAIService = OpenAIService(apiKey: openaiKey, prompt: improvementPrompt)
-        print("OpenAI service updated (API Key length: \(openaiKey.count))")
+    private func updateAIService() {
+        let backend: AIBackend = aiBackend == "ollama" ? .ollama : .openAI
+        openAIService = OpenAIService(
+            apiKey: openaiKey,
+            prompt: improvementPrompt,
+            backend: backend,
+            model: selectedModel,
+            serverURL: backend == .openAI ? "https://api.openai.com/v1" : ollamaURL
+        )
+        print("AI service updated (Backend: \(aiBackend), Model: \(selectedModel))")
     }
     
     private func setupHotkeyManager() {
@@ -119,10 +135,17 @@ class AppState: ObservableObject {
             print("Selected text: \(selectedText.prefix(50))...")
             
             guard let improved = try await openAIService?.improveText(selectedText) else {
-                lastError = "OpenAI API key not configured"
+                let errorMessage = aiBackend == "openai" ? 
+                    "OpenAI API key not configured" :
+                    "Ollama connection failed"
+                lastError = errorMessage
                 let alert = NSAlert()
-                alert.messageText = "OpenAI API Key Required"
-                alert.informativeText = "Please open Settings and enter your OpenAI API key to use ButlerAI."
+                alert.messageText = aiBackend == "openai" ? 
+                    "OpenAI API Key Required" :
+                    "Ollama Connection Error"
+                alert.informativeText = aiBackend == "openai" ?
+                    "Please open Settings and enter your OpenAI API key to use ButlerAI." :
+                    "Please make sure Ollama is running and check your server URL in Settings."
                 alert.alertStyle = .warning
                 alert.addButton(withTitle: "Open Settings")
                 alert.addButton(withTitle: "Cancel")
@@ -133,16 +156,16 @@ class AppState: ObservableObject {
                 }
                 return
             }
-            print("Received improved text from OpenAI")
+            print("Received improved text from AI service")
             
             try clipboardManager.replaceSelectedText(with: improved)
             print("Successfully replaced text")
             lastError = nil
         } catch let error as OpenAIError {
-            print("OpenAI error: \(error.localizedDescription)")
+            print("AI service error: \(error.localizedDescription)")
             lastError = error.localizedDescription
             let alert = NSAlert()
-            alert.messageText = "OpenAI Error"
+            alert.messageText = "\(aiBackend == "openai" ? "OpenAI" : "Ollama") Error"
             alert.informativeText = error.localizedDescription
             alert.alertStyle = .warning
             alert.addButton(withTitle: "OK")
@@ -167,16 +190,66 @@ class AppState: ObservableObject {
 
 struct SettingsView: View {
     @ObservedObject var appState: AppState
+    @State private var availableModels: [String] = []
+    @State private var isLoadingModels: Bool = false
+    @State private var errorMessage: String = ""
     
     var body: some View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("OpenAI API Key")
-                            .font(.headline)
-                        SecureField("Enter your API key", text: $appState.openaiKey)
-                            .textFieldStyle(.roundedBorder)
+                    Picker("AI Backend", selection: $appState.aiBackend) {
+                        Text("OpenAI").tag("openai")
+                        Text("Ollama (Local)").tag("ollama")
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: appState.aiBackend) { newValue in
+                        if newValue == "ollama" {
+                            Task {
+                                await fetchOllamaModels()
+                            }
+                        }
+                    }
+
+                    if appState.aiBackend == "openai" {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("OpenAI API Key")
+                                .font(.headline)
+                            SecureField("Enter your API key", text: $appState.openaiKey)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Ollama Server URL")
+                                .font(.headline)
+                            TextField("Server URL", text: $appState.ollamaURL)
+                                .textFieldStyle(.roundedBorder)
+                            
+                            Text("Model")
+                                .font(.headline)
+                            if isLoadingModels {
+                                ProgressView("Loading models...")
+                            } else {
+                                Picker("Model", selection: $appState.selectedModel) {
+                                    ForEach(availableModels, id: \.self) { model in
+                                        Text(model).tag(model)
+                                    }
+                                }
+                                .disabled(availableModels.isEmpty)
+                                
+                                if !errorMessage.isEmpty {
+                                    Text(errorMessage)
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                }
+                                
+                                Button("Refresh Models") {
+                                    Task {
+                                        await fetchOllamaModels()
+                                    }
+                                }
+                            }
+                        }
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
@@ -211,6 +284,23 @@ struct SettingsView: View {
             .padding()
         }
         .frame(width: 400)
+    }
+    
+    private func fetchOllamaModels() async {
+        isLoadingModels = true
+        errorMessage = ""
+        
+        do {
+            availableModels = try await OpenAIService.fetchOllamaModels(serverURL: appState.ollamaURL)
+            if !availableModels.isEmpty && !availableModels.contains(appState.selectedModel) {
+                appState.selectedModel = availableModels[0]
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            availableModels = []
+        }
+        
+        isLoadingModels = false
     }
 }
 

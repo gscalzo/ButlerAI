@@ -22,8 +22,10 @@
    - Manages clipboard operations
 
 4. OpenAIService
-   - Handles API communication
-   - Processes text improvements
+   - Handles API communication with OpenAI and Ollama
+   - Manages model selection and backend switching
+   - Fetches available models from Ollama
+   - Processes text improvements through chosen backend
 
 5. ErrorHandler
    - Manages error popups
@@ -38,10 +40,12 @@
 
 ## Recent Changes
 - Implemented complete menubar app functionality
-- Added OpenAI API integration with error handling
-- Created clipboard management system
-- Implemented global hotkey support (⌃⌥⌘C)
-- Added settings UI for configuration
+- Added dual backend support (OpenAI and Ollama)
+- Implemented model selection for Ollama backend
+- Created unified settings UI for both backends
+- Added dynamic model list fetching from Ollama
+- Updated error handling for both backends
+- Enhanced settings UI with backend switching
 
 ## Implementation Details
 
@@ -54,9 +58,10 @@ The central state manager that:
 
 ### Services
 1. OpenAIService
-   - Handles API communication with OpenAI
-   - Manages text improvement requests
-   - Provides error handling for API issues
+   - Supports both OpenAI and Ollama backends
+   - Manages backend selection and configuration
+   - Handles model listing and selection for Ollama
+   - Provides unified error handling for both APIs
 
 2. ClipboardManager
    - Manages text selection capture
@@ -70,13 +75,19 @@ The central state manager that:
 
 ### Settings
 Persistent storage for:
+- Selected AI backend (OpenAI/Ollama)
 - OpenAI API key (secure storage)
+- Ollama server URL
+- Selected AI model
 - Custom improvement prompt
 - Error state
 
 ### Error Handling
 Comprehensive error handling for:
-- Missing API key
+- Backend-specific errors:
+  - OpenAI: Missing API key, API limits
+  - Ollama: Connection issues, model loading
 - No text selected
 - API communication issues
 - Text replacement failures
+- Model availability and selection

@@ -1,21 +1,50 @@
-# Current Task: Initial Setup and Planning
+# Current Task: Ollama Integration
 
-## Current Objectives
-1. Plan the application architecture
-2. Define technical requirements
-3. Outline implementation steps
+## Completed Objectives
+1. Added Ollama backend support
+2. Implemented model selection capabilities
+3. Created unified settings UI for both backends
+4. Updated documentation and user guides
 
-## Context
-- Starting with a fresh Swift project
-- Need to create a menubar-only application
-- Requires system-wide keyboard shortcut handling
-- Must interact with system clipboard
-- Needs OpenAI API integration
+## Changes Made
+1. Modified OpenAIService.swift:
+   - Added AIBackend enum for backend selection
+   - Implemented Ollama model fetching
+   - Added backend-specific URL handling
+   - Updated error handling
+
+2. Updated ButlerApp.swift:
+   - Added backend selection in settings
+   - Implemented model selection UI
+   - Added Ollama configuration options
+   - Enhanced error messaging
+
+3. Updated Documentation:
+   - Added Ollama setup guide
+   - Updated project documentation
+   - Enhanced error handling documentation
+
+4. Enhanced User Interface:
+   - Added backend selection toggle
+   - Implemented model selection dropdown
+   - Added server URL configuration
+   - Improved error feedback
+
+## Testing Completed
+- Backend switching functionality
+- Model fetching from Ollama
+- Error handling for both backends
+- Settings persistence
+- Text improvement with both backends
 
 ## Next Steps
-1. Set up project structure
-2. Configure menubar-only app settings
-3. Implement keyboard shortcut monitoring
-4. Add clipboard management
-5. Integrate OpenAI API
-6. Implement error handling
+1. Consider additional Ollama-specific features:
+   - Model temperature control
+   - System prompt customization
+   - Model pre-downloading UI
+
+2. Potential Improvements:
+   - Caching of available models
+   - Status indicators for backend health
+   - Model performance metrics
+   - Batch processing capabilities
