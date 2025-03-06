@@ -37,10 +37,11 @@ ButlerAI is an elegant macOS menubar application that helps you improve your wri
 
 ## Installation 🚀
 
-1. Download the latest release from the Releases page
-2. Move ButlerAI.app to your Applications folder
-3. Launch ButlerAI
-4. Configure your OpenAI API key in settings
+1. Download ButlerAI.dmg from the [Releases page](../../releases/latest)
+2. Open the DMG file
+3. Drag ButlerAI.app to your Applications folder
+4. Launch ButlerAI from Applications
+5. Configure your OpenAI API key in settings
 
 ## Setup ⚙️
 

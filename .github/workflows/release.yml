@@ -1,0 +1,75 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install the Apple certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Import certificate from secrets
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      - name: Build and archive
+        env:
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+          APPLE_DEVELOPER_PASSWORD: ${{ secrets.APPLE_DEVELOPER_PASSWORD }}
+        run: |
+          # Build the app
+          xcodebuild -project Butler.xcodeproj -scheme Butler -configuration Release -archivePath $RUNNER_TEMP/Butler.xcarchive archive
+
+          # Export archive to app
+          xcodebuild -exportArchive -archivePath $RUNNER_TEMP/Butler.xcarchive -exportPath $RUNNER_TEMP/export -exportOptionsPlist ExportOptions.plist
+
+          # Create DMG
+          hdiutil create -volname "ButlerAI" -srcfolder $RUNNER_TEMP/export/Butler.app -ov -format UDZO $RUNNER_TEMP/ButlerAI.dmg
+
+          # Sign and notarize DMG
+          xcrun notarytool submit $RUNNER_TEMP/ButlerAI.dmg --apple-id "$APPLE_DEVELOPER_ID" --password "$APPLE_DEVELOPER_PASSWORD" --team-id "$(security find-identity -v -p codesigning | grep "Developer ID" | cut -d '"' -f 2 | cut -d '(' -f 2 | cut -d ')' -f 1)" --wait
+          xcrun stapler staple $RUNNER_TEMP/ButlerAI.dmg
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ runner.temp }}/ButlerAI.dmg
+          asset_name: ButlerAI.dmg
+          asset_content_type: application/x-apple-diskimage
