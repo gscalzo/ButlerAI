@@ -69,7 +69,6 @@ jobs:
           # Set keychain as default and unlock
           log "Setting up keychain..."
           if security default-keychain -s $KEYCHAIN_PATH && \
-             security set-default-keychain -d $KEYCHAIN_PATH && \
              security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH; then
               log "Keychain set as default and unlocked"
           else
