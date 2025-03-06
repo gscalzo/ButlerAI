@@ -216,6 +216,9 @@ struct SettingsView: View {
                             Task {
                                 await fetchOllamaModels()
                             }
+                        } else {
+                            // Reset to default OpenAI model when switching back
+                            appState.selectedModel = "gpt-4o-mini"
                         }
                     }
 

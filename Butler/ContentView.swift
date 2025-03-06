@@ -29,6 +29,8 @@ struct ContentView: View {
                         Task {
                             await fetchOllamaModels()
                         }
+                    } else {
+                        selectedModel = "gpt-4o-mini"
                     }
                 }
             }
