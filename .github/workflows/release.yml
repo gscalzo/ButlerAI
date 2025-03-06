@@ -66,41 +66,57 @@ jobs:
               exit 1
           fi
           
-          # Set keychain as default
-          log "Setting as default keychain..."
-          if security default-keychain -s $KEYCHAIN_PATH; then
-              log "Default keychain set successfully"
-              log "Unlocking keychain..."
-              security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          # Set keychain as default and unlock
+          log "Setting up keychain..."
+          if security default-keychain -s $KEYCHAIN_PATH && \
+             security set-default-keychain -d $KEYCHAIN_PATH && \
+             security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH; then
+              log "Keychain set as default and unlocked"
           else
-              log "Error: Failed to set default keychain"
+              log "Error: Failed to set up keychain"
               exit 1
           fi
           
-          # Import certificate
-          log "Importing certificate to keychain..."
-          if security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH; then
-              log "Certificate imported successfully"
+          # Import certificate and setup for codesigning
+          log "Setting up certificate..."
+          if security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH && \
+             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH; then
+              log "Certificate imported and configured for codesigning"
           else
               log "Error: Failed to import certificate"
               exit 1
           fi
           
-          # Set partition list
-          log "Setting partition list for codesigning..."
-          if security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH; then
-              log "Partition list set successfully"
+          # Configure keychain search list
+          log "Configuring keychain search list..."
+          if security list-keychains -d user -s $KEYCHAIN_PATH && \
+             security list-keychains -s $KEYCHAIN_PATH; then
+              log "Keychain search list configured"
           else
-              log "Error: Failed to set partition list"
+              log "Error: Failed to configure keychain search list"
               exit 1
           fi
           
-          # Add to keychain list
-          log "Adding to system keychain list..."
-          if security list-keychain -d user -s $KEYCHAIN_PATH; then
-              log "Keychain added to system list successfully"
-          else
-              log "Error: Failed to add keychain to system list"
+          # Wait for keychain to be ready
+          log "Waiting for keychain to be ready..."
+          sleep 5
+          
+          # Reset keychain list
+          log "Resetting keychain list..."
+          security list-keychains
+          
+          # Verify keychain is default
+          log "Verifying keychain setup..."
+          CURRENT_KEYCHAIN=$(security default-keychain | xargs)
+          if [ "$CURRENT_KEYCHAIN" != "$KEYCHAIN_PATH" ]; then
+              log "Error: Keychain is not set as default. Current: $CURRENT_KEYCHAIN, Expected: $KEYCHAIN_PATH"
+              exit 1
+          fi
+          
+          # Verify keychain is in search list
+          log "Verifying keychain search list..."
+          if ! security list-keychains | grep -q "$KEYCHAIN_PATH"; then
+              log "Error: Keychain not found in search list"
               exit 1
           fi
           
@@ -124,6 +140,8 @@ jobs:
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
           APPLE_DEVELOPER_PASSWORD: ${{ secrets.APPLE_DEVELOPER_PASSWORD }}
           TEAM_ID: ${{ secrets.TEAM_ID }}
+          KEYCHAIN_PATH: ${{ runner.temp }}/app-signing.keychain-db
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}
         run: |
           # Define log tag function
           log() { echo "[BUTLER] $1"; }
@@ -147,9 +165,25 @@ jobs:
               exit 1
           fi
 
+          # Ensure keychain is ready for export
+          log "Preparing keychain for export..."
+          security list-keychains -s $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Verify certificate is available
+          log "Verifying certificate before export..."
+          IDENTITIES=$(security find-identity -v -p codesigning)
+          log "Available identities:\n$IDENTITIES"
+          if ! echo "$IDENTITIES" | grep -q "Developer ID Application"; then
+              log "Error: Certificate not found before export"
+              exit 1
+          fi
+
           # Export archive to app (with detailed logging)
           log "Exporting archive to app..."
           log "Export path: $RUNNER_TEMP/export"
+          security find-identity -v -p codesigning
           if xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/Butler.xcarchive \
             -exportPath $RUNNER_TEMP/export \
