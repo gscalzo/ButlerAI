@@ -23,8 +23,8 @@ jobs:
           
           # Verify we're using Xcode 16.2
           XCODE_VERSION=$(xcodebuild -version | head -n 1 | awk '{ print $2 }')
-          if [ "$XCODE_VERSION" != "16.2.0" ]; then
-            echo "Error: Expected Xcode 16.2.0 but got $XCODE_VERSION"
+          if [ "$XCODE_VERSION" != "16.2" ]; then
+            echo "Error: Expected Xcode 16.2 but got $XCODE_VERSION"
             exit 1
           fi
 
