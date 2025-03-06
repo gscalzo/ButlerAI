@@ -1,4 +1,4 @@
-name: Create Release
+name: Release Process
 
 on:
   push:
@@ -6,12 +6,46 @@ on:
       - 'v*'
 
 jobs:
-  build:
+  update-version:
     runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Get version from tag
+        run: |
+          # Remove 'v' prefix and store version
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          
+      - name: Update Info.plist
+        run: |
+          # Update both version strings
+          plutil -replace CFBundleShortVersionString -string $VERSION Butler/Info.plist
+          plutil -replace CFBundleVersion -string $VERSION Butler/Info.plist
+          
+      - name: Commit changes
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add Butler/Info.plist
+          git commit -m "Bump version to $VERSION [skip ci]"
+          git push
+
+  build:
+    needs: update-version
+    runs-on: macos-15
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}  # Get the latest commit after version update
 
       - name: Select and Verify Xcode 16.2
         run: |
