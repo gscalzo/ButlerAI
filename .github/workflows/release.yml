@@ -39,7 +39,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git add Butler/Info.plist
           git commit -m "Bump version to $VERSION in release branch"
-          git push origin $BRANCH_NAME
+          git push --set-upstream origin $BRANCH_NAME
 
   build:
     needs: update-version
