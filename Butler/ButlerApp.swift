@@ -16,6 +16,7 @@ class AppState: ObservableObject {
     private let clipboardManager = ClipboardManager()
     private var openAIService: OpenAIService?
     private var settingsWindowController: SettingsWindowController?
+    @Published var isProcessing: Bool = false
     
     @Published var isSettingsOpen = false {
         didSet {
@@ -128,9 +129,11 @@ class AppState: ObservableObject {
         print("New settings window created and shown")
     }
     
+    
     private func improveSelectedText() async {
         print("Starting text improvement")
         do {
+            isProcessing = true
             let selectedText = try clipboardManager.getSelectedText()
             print("Selected text: \(selectedText.prefix(50))...")
             
@@ -154,6 +157,7 @@ class AppState: ObservableObject {
                 if alert.runModal() == .alertFirstButtonReturn {
                     self.isSettingsOpen = true
                 }
+                isProcessing = false
                 return
             }
             print("Received improved text from AI service")
@@ -161,7 +165,9 @@ class AppState: ObservableObject {
             try clipboardManager.replaceSelectedText(with: improved)
             print("Successfully replaced text")
             lastError = nil
+            isProcessing = false
         } catch let error as OpenAIError {
+            isProcessing = false
             print("AI service error: \(error.localizedDescription)")
             lastError = error.localizedDescription
             let alert = NSAlert()
@@ -172,6 +178,7 @@ class AppState: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
         } catch let error as ClipboardManager.ClipboardError {
+            isProcessing = false
             print("Clipboard error: \(error.localizedDescription)")
             lastError = error.localizedDescription
             let alert = NSAlert()
@@ -184,6 +191,7 @@ class AppState: ObservableObject {
         } catch {
             print("Unexpected error: \(error)")
             lastError = "An unexpected error occurred"
+            isProcessing = false
         }
     }
 }
@@ -311,8 +319,19 @@ struct ButlerApp: App {
     var body: some Scene {
         MenuBarExtra {
             VStack(spacing: 0) {
-                HStack {
-                    Image(systemName: "wand.and.stars")
+                HStack(spacing: 8) {
+                    Group {
+                        if appState.isProcessing {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .imageScale(.medium)
+                                .rotationEffect(.degrees(appState.isProcessing ? 360 : 0))
+                                .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: appState.isProcessing)
+                        } else {
+                            Image(systemName: "wand.and.stars")
+                        }
+                    }
+                    .frame(width: 18, height: 18)
+                    
                     Text("ButlerAI")
                         .font(.headline)
                 }
@@ -346,7 +365,14 @@ struct ButlerApp: App {
             }
             .fixedSize()
         } label: {
-            Image(systemName: "wand.and.stars")
+            if appState.isProcessing {
+                Image(systemName: "clock.arrow.circlepath")
+                    .imageScale(.medium)
+                    .rotationEffect(.degrees(appState.isProcessing ? 360 : 0))
+                    .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: appState.isProcessing)
+            } else {
+                Image(systemName: "wand.and.stars")
+            }
         }
     }
 }

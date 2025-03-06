@@ -1,7 +1,7 @@
 # Butler Project Roadmap
 
 ## Project Overview
-Butler is a macOS menubar application that helps improve text by correcting English mistakes using OpenAI API.
+Butler is a macOS menubar application that helps improve text by correcting English mistakes using OpenAI API or local Ollama models, featuring visual feedback during processing.
 
 ## High-Level Goals
 - [x] Create a menubar-only macOS application
@@ -15,15 +15,19 @@ Butler is a macOS menubar application that helps improve text by correcting Engl
 ## Key Features
 1. Global Keyboard Shortcut (control-option-cmd-c)
 2. System clipboard integration
-3. OpenAI-powered text improvement
+3. AI-powered text improvement (OpenAI/Ollama)
 4. Error feedback via popups
-5. Selected text replacement
+5. Interactive text processing with loading indicators
 6. Settings menu in menubar:
    - AI backend selection (OpenAI/Ollama)
    - OpenAI API key configuration
    - Ollama server URL configuration
    - Model selection for Ollama
    - Customizable improvement prompt
+7. Processing state management:
+   - Visual loading indicators
+   - Text state preservation
+   - Error recovery
 
 ## Completion Criteria
 - Application runs in menubar only (no dock icon)
@@ -48,3 +52,6 @@ Butler is a macOS menubar application that helps improve text by correcting Engl
 - [x] Added Ollama backend support
 - [x] Implemented model selection for Ollama
 - [x] Updated settings UI for backend selection
+- [x] Added processing state indicators
+- [x] Implemented text state preservation
+- [x] Enhanced error recovery with original text restoration

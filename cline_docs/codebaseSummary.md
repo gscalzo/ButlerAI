@@ -46,6 +46,8 @@
 - Added dynamic model list fetching from Ollama
 - Updated error handling for both backends
 - Enhanced settings UI with backend switching
+- Added loading indicators for text improvement
+- Implemented text state preservation during processing
 
 ## Implementation Details
 
@@ -55,6 +57,8 @@ The central state manager that:
 - Manages settings persistence
 - Handles error reporting
 - Controls UI state
+- Manages text improvement states and animations
+- Preserves original text during processing
 
 ### Services
 1. OpenAIService
@@ -91,3 +95,5 @@ Comprehensive error handling for:
 - API communication issues
 - Text replacement failures
 - Model availability and selection
+- Processing state management
+- Text state preservation and recovery
