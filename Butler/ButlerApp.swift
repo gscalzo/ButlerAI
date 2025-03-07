@@ -5,7 +5,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onClose: () -> Void = {}
     
     func windowWillClose(_ notification: Notification) {
-        print("Settings window closed")
+        LoggerService.shared.log("Settings window closed")
         onClose()
     }
 }
@@ -17,11 +17,12 @@ class AppState: ObservableObject {
     private var openAIService: OpenAIService?
     private var languageService: LanguageService?
     private var settingsWindowController: SettingsWindowController?
+    private var logWindowController: LogWindowController?
     @Published var isProcessing: Bool = false
     
     @Published var isSettingsOpen = false {
         didSet {
-            print("Settings window state: \(self.isSettingsOpen)")
+            LoggerService.shared.log("Settings window state: \(self.isSettingsOpen)")
             if self.isSettingsOpen {
                 self.showSettings()
             }
@@ -30,7 +31,7 @@ class AppState: ObservableObject {
     @Published var lastError: String? {
         didSet {
             if let error = self.lastError {
-                print("Error: \(error)")
+                LoggerService.shared.log(error, type: .error)
             }
         }
     }
@@ -65,7 +66,7 @@ class AppState: ObservableObject {
     }
     
     init() {
-        print("Initializing ButlerAI")
+        LoggerService.shared.log("Initializing ButlerAI")
         self.updateAIService()
         self.setupHotkeyManager()
     }
@@ -82,13 +83,13 @@ class AppState: ObservableObject {
         if let openAIService = openAIService {
             languageService = LanguageService(openAIService: openAIService)
         }
-        print("AI service updated (Backend: \(aiBackend), Model: \(selectedModel))")
+        LoggerService.shared.log("AI service updated (Backend: \(aiBackend), Model: \(selectedModel))")
     }
     
     private func setupHotkeyManager() {
-        print("Setting up hotkey (⌃⌥⌘C)")
+        LoggerService.shared.log("Setting up hotkey (⌃⌥⌘C)")
         hotkeyManager = HotkeyManager { [weak self] in
-            print("Hotkey triggered")
+            LoggerService.shared.log("Hotkey triggered")
             Task { [weak self] in
                 await self?.improveSelectedText()
             }
@@ -96,12 +97,12 @@ class AppState: ObservableObject {
     }
     
     private func showSettings() {
-        print("Showing settings window")
+        LoggerService.shared.log("Showing settings window")
         
         if let controller = settingsWindowController {
             controller.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
-            print("Reusing existing settings window")
+            LoggerService.shared.log("Reusing existing settings window")
             return
         }
         
@@ -117,7 +118,7 @@ class AppState: ObservableObject {
         
         let controller = SettingsWindowController(window: window)
         controller.onClose = { [weak self] in
-            print("Settings window will be cleaned up")
+            LoggerService.shared.log("Settings window will be cleaned up")
             self?.settingsWindowController = nil
             self?.isSettingsOpen = false
         }
@@ -130,16 +131,33 @@ class AppState: ObservableObject {
         controller.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         
-        print("New settings window created and shown")
+        LoggerService.shared.log("New settings window created and shown")
     }
     
+    func showLogs() {
+        LoggerService.shared.log("Showing logs window")
+        
+        if let controller = logWindowController {
+            controller.showWindow()
+            LoggerService.shared.log("Reusing existing logs window")
+            return
+        }
+        
+        logWindowController = LogWindowController { [weak self] in
+            LoggerService.shared.log("Logs window will be cleaned up")
+            self?.logWindowController = nil
+        }
+        
+        logWindowController?.showWindow()
+        LoggerService.shared.log("New logs window created and shown")
+    }
     
     private func improveSelectedText() async {
-        print("Starting text improvement")
+        LoggerService.shared.log("Starting text improvement")
         do {
             isProcessing = true
             let selectedText = try clipboardManager.getSelectedText()
-            print("Selected text: \(selectedText.prefix(50))...")
+            LoggerService.shared.log("Selected text: \(selectedText.prefix(50))...")
             
             guard let improved = try await languageService?.improveWithLanguageHandling(selectedText) else {
                 let errorMessage = aiBackend == "openai" ? 
@@ -164,15 +182,15 @@ class AppState: ObservableObject {
                 isProcessing = false
                 return
             }
-            print("Received improved text from AI service")
+            LoggerService.shared.log("Received improved text from AI service")
             
             try clipboardManager.replaceSelectedText(with: improved)
-            print("Successfully replaced text")
+            LoggerService.shared.log("Successfully replaced text")
             lastError = nil
             isProcessing = false
         } catch let error as OpenAIError {
             isProcessing = false
-            print("AI service error: \(error.localizedDescription)")
+            LoggerService.shared.log("AI service error: \(error.localizedDescription)", type: .error)
             lastError = error.localizedDescription
             let alert = NSAlert()
             alert.messageText = "\(aiBackend == "openai" ? "OpenAI" : "Ollama") Error"
@@ -183,7 +201,7 @@ class AppState: ObservableObject {
             alert.runModal()
         } catch let error as ClipboardManager.ClipboardError {
             isProcessing = false
-            print("Clipboard error: \(error.localizedDescription)")
+            LoggerService.shared.log("Clipboard error: \(error.localizedDescription)", type: .error)
             lastError = error.localizedDescription
             let alert = NSAlert()
             alert.messageText = "No Text Selected"
@@ -193,7 +211,7 @@ class AppState: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
         } catch {
-            print("Unexpected error: \(error)")
+            LoggerService.shared.log("Unexpected error: \(error)", type: .error)
             lastError = "An unexpected error occurred"
             isProcessing = false
         }
@@ -357,8 +375,15 @@ struct ButlerApp: App {
                     Divider()
                 }
                 
+                Button("Show Logs") {
+                    LoggerService.shared.log("Opening logs from menu")
+                    appState.showLogs()
+                }
+                .keyboardShortcut("l")
+                .padding(.vertical, 4)
+                
                 Button("Settings...") {
-                    print("Opening settings from menu")
+                    LoggerService.shared.log("Opening settings from menu")
                     appState.isSettingsOpen = true
                 }
                 .keyboardShortcut(",")

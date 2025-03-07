@@ -1,46 +1,88 @@
-# Current Task: Language Support Enhancement
+# Current Task: Logging System and Accessibility Improvements
 
 ## Completed Objectives
-1. Added support for improving non-Italian text
-2. Preserved existing Italian-to-English translation
-3. Maintained compatibility with both OpenAI and Ollama backends
-4. Integrated language detection in the main app flow
+1. Added comprehensive logging system
+2. Enhanced accessibility handling with automatic monitoring
+3. Added logs window with filtering and search
+4. Replaced all print statements with structured logging
 
 ## Changes Made
-1. Modified LanguageService.swift:
-   - Added new `improveWithLanguageHandling` function
-   - Preserved existing language detection logic
-   - Maintained existing translation functionality
-   - Added direct text improvement for non-Italian text
 
-2. Modified ButlerApp.swift:
-   - Added LanguageService property to AppState
-   - Initialized LanguageService in updateAIService
-   - Updated improveSelectedText to use LanguageService
-   - Maintained existing error handling
+1. Added LoggerService:
+   - Centralized logging with timestamps
+   - Log categorization (info/warning/error)
+   - Log persistence across window sessions
+   - Export and copy functionality
+   - Search and filtering capabilities
 
-3. Implementation Details:
-   - Language detection remains focused on Italian
-   - Italian text: translates to English then improves
-   - Non-Italian text: directly improves using configured backend
-   - Uses existing OpenAI/Ollama infrastructure
+2. Added Log Window:
+   - Created LogView with filtering and search
+   - Added "Show Logs" menu item
+   - Implemented auto-scrolling
+   - Added copy and clear functions
+   - Color-coded log types
+
+3. Enhanced Accessibility Handling:
+   - Continuous permission monitoring with timer
+   - Automatic permission re-check every 2 seconds
+   - Instant hotkey registration upon permission grant
+   - Improved permission request UI
+   - Direct link to System Settings
+   - Better feedback in logs
+   - Automatic recovery after permissions granted
+
+4. Updated Core Services:
+   - Replaced print() with LoggerService.log()
+   - Added detailed error logging
+   - Enhanced debugging information
+   - Added operation timestamps
+   - Improved error context
+
+## Implementation Details
+1. LoggerService Structure:
+   - Singleton instance for app-wide logging
+   - Thread-safe log storage
+   - Timestamped entries
+   - Log type categorization
+
+2. UI Components:
+   - Log window with search and filters
+   - Auto-scrolling log view
+   - Color-coded log entries
+   - Toolbar with actions
+
+3. Accessibility Flow:
+   - Initial permission check on startup
+   - Timer-based permission monitoring
+   - Automatic hotkey registration
+   - User-friendly permission requests
+   - Clear setup instructions
+   - System Settings integration
+   - Automatic recovery mechanisms
 
 ## Testing Completed
-- Italian detection and translation (preserved)
-- Non-Italian text improvement (new)
-- Backend compatibility (OpenAI/Ollama)
-- Error handling validation
-- Service initialization and update flow
+- Log window functionality
+- Search and filtering
+- Enhanced accessibility permission flow
+- Continuous permission monitoring
+- Auto-recovery after permission grant
+- Error logging
+- Log persistence
+- Auto-scrolling
+- Export functionality
 
 ## Next Steps
 1. Potential Improvements:
-   - Add support for additional languages
-   - Implement language-specific improvement prompts
-   - Add language detection indicators
-   - Consider automatic language detection toggle
+   - Log file persistence
+   - Log rotation
+   - Advanced filtering options
+   - Log analytics
+   - Custom log categories
 
 2. Future Considerations:
-   - Multi-language translation support
-   - Language-specific model selection
-   - Custom prompts per language
-   - Language preference settings
+   - Remote logging support
+   - Log encryption
+   - Performance metrics
+   - Debug mode toggle
+   - Log level configuration
+   - Additional permission monitoring options

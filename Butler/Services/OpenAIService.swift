@@ -25,14 +25,18 @@ class OpenAIService {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         
+        LoggerService.shared.log("Fetching models from Ollama server: \(serverURL)")
+        
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
+                LoggerService.shared.log("Invalid response from Ollama server", type: .error)
                 throw OpenAIError(message: "Invalid response from Ollama server")
             }
             
             if httpResponse.statusCode != 200 {
+                LoggerService.shared.log("HTTP \(httpResponse.statusCode) from Ollama server", type: .error)
                 throw OpenAIError(message: "HTTP \(httpResponse.statusCode) from Ollama server")
             }
             
@@ -45,8 +49,10 @@ class OpenAIService {
             }
             
             let modelResponse = try JSONDecoder().decode(OllamaModelsResponse.self, from: data)
+            LoggerService.shared.log("Successfully fetched \(modelResponse.models.count) models from Ollama")
             return modelResponse.models.map { $0.name }
         } catch {
+            LoggerService.shared.log("Failed to fetch Ollama models: \(error.localizedDescription)", type: .error)
             throw OpenAIError(message: "Failed to fetch Ollama models: \(error.localizedDescription)")
         }
     }
@@ -58,13 +64,13 @@ class OpenAIService {
         self.baseURL = URL(string: backend == .openAI ? serverURL : "\(serverURL)/v1")!
         // Add safety instruction and text delimiters to the prompt
         self.basePrompt = prompt
-        print("AIService initialized with backend: \(backend), model: \(model) (API Key present: \(!apiKey.isEmpty))")
+        LoggerService.shared.log("AIService initialized with backend: \(backend), model: \(model) (API Key present: \(!apiKey.isEmpty))")
     }
     
     func improveText(_ text: String) async throws -> String {
-        print("Starting OpenAI text improvement request")
+        LoggerService.shared.log("Starting text improvement request")
         guard !apiKey.isEmpty else {
-            print("Error: API key is empty")
+            LoggerService.shared.log("Error: API key is empty", type: .error)
             throw OpenAIError(message: "OpenAI API key not configured")
         }
         
@@ -77,7 +83,7 @@ class OpenAIService {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         
-        print("Preparing AI request for model \(model) with text length: \(text.count)")
+        LoggerService.shared.log("Preparing AI request for model \(model) with text length: \(text.count)")
         
         // Following official API structure
         let payload: [String: Any] = [
@@ -101,38 +107,39 @@ class OpenAIService {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-            print("Request payload prepared")
+            LoggerService.shared.log("Request payload prepared")
             
             let (data, response) = try await URLSession.shared.data(for: request)
-            print("Received response from AI service")
+            LoggerService.shared.log("Received response from AI service")
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                print("Error: Invalid response type from server")
+                LoggerService.shared.log("Error: Invalid response type from server", type: .error)
                 throw OpenAIError(message: "Invalid response from server")
             }
             
             if httpResponse.statusCode != 200 {
-                print("HTTP Error: \(httpResponse.statusCode)")
+                LoggerService.shared.log("HTTP Error: \(httpResponse.statusCode)", type: .error)
                 if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                    print("AI Service Error: \(errorResponse.error.message)")
+                    LoggerService.shared.log("AI Service Error: \(errorResponse.error.message)", type: .error)
                     throw OpenAIError(message: errorResponse.error.message)
                 }
                 throw OpenAIError(message: "HTTP \(httpResponse.statusCode)")
             }
             
-            print("Parsing AI service response")
+            LoggerService.shared.log("Parsing AI service response")
             let apiResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
             
             guard let content = apiResponse.choices.first?.message.content else {
-                print("Error: No content in response")
+                LoggerService.shared.log("Error: No content in response", type: .error)
                 throw OpenAIError(message: "No content in response")
             }
             
-            print("Successfully extracted improved text (length: \(content.count))")
-            return content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            LoggerService.shared.log("Successfully extracted improved text (length: \(finalContent.count))")
+            return finalContent
             
         } catch {
-            print("Error during OpenAI request: \(error.localizedDescription)")
+            LoggerService.shared.log("Error during OpenAI request: \(error.localizedDescription)", type: .error)
             throw error
         }
     }
