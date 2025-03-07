@@ -15,6 +15,7 @@ class AppState: ObservableObject {
     private var hotkeyManager: HotkeyManager?
     private let clipboardManager = ClipboardManager()
     private var openAIService: OpenAIService?
+    private var languageService: LanguageService?
     private var settingsWindowController: SettingsWindowController?
     @Published var isProcessing: Bool = false
     
@@ -78,6 +79,9 @@ class AppState: ObservableObject {
             model: selectedModel,
             serverURL: backend == .openAI ? "https://api.openai.com/v1" : ollamaURL
         )
+        if let openAIService = openAIService {
+            languageService = LanguageService(openAIService: openAIService)
+        }
         print("AI service updated (Backend: \(aiBackend), Model: \(selectedModel))")
     }
     
@@ -137,7 +141,7 @@ class AppState: ObservableObject {
             let selectedText = try clipboardManager.getSelectedText()
             print("Selected text: \(selectedText.prefix(50))...")
             
-            guard let improved = try await openAIService?.improveText(selectedText) else {
+            guard let improved = try await languageService?.improveWithLanguageHandling(selectedText) else {
                 let errorMessage = aiBackend == "openai" ? 
                     "OpenAI API key not configured" :
                     "Ollama connection failed"

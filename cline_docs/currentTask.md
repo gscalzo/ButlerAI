@@ -1,50 +1,46 @@
-# Current Task: Ollama Integration
+# Current Task: Language Support Enhancement
 
 ## Completed Objectives
-1. Added Ollama backend support
-2. Implemented model selection capabilities
-3. Created unified settings UI for both backends
-4. Updated documentation and user guides
+1. Added support for improving non-Italian text
+2. Preserved existing Italian-to-English translation
+3. Maintained compatibility with both OpenAI and Ollama backends
+4. Integrated language detection in the main app flow
 
 ## Changes Made
-1. Modified OpenAIService.swift:
-   - Added AIBackend enum for backend selection
-   - Implemented Ollama model fetching
-   - Added backend-specific URL handling
-   - Updated error handling
+1. Modified LanguageService.swift:
+   - Added new `improveWithLanguageHandling` function
+   - Preserved existing language detection logic
+   - Maintained existing translation functionality
+   - Added direct text improvement for non-Italian text
 
-2. Updated ButlerApp.swift:
-   - Added backend selection in settings
-   - Implemented model selection UI
-   - Added Ollama configuration options
-   - Enhanced error messaging
+2. Modified ButlerApp.swift:
+   - Added LanguageService property to AppState
+   - Initialized LanguageService in updateAIService
+   - Updated improveSelectedText to use LanguageService
+   - Maintained existing error handling
 
-3. Updated Documentation:
-   - Added Ollama setup guide
-   - Updated project documentation
-   - Enhanced error handling documentation
-
-4. Enhanced User Interface:
-   - Added backend selection toggle
-   - Implemented model selection dropdown
-   - Added server URL configuration
-   - Improved error feedback
+3. Implementation Details:
+   - Language detection remains focused on Italian
+   - Italian text: translates to English then improves
+   - Non-Italian text: directly improves using configured backend
+   - Uses existing OpenAI/Ollama infrastructure
 
 ## Testing Completed
-- Backend switching functionality
-- Model fetching from Ollama
-- Error handling for both backends
-- Settings persistence
-- Text improvement with both backends
+- Italian detection and translation (preserved)
+- Non-Italian text improvement (new)
+- Backend compatibility (OpenAI/Ollama)
+- Error handling validation
+- Service initialization and update flow
 
 ## Next Steps
-1. Consider additional Ollama-specific features:
-   - Model temperature control
-   - System prompt customization
-   - Model pre-downloading UI
+1. Potential Improvements:
+   - Add support for additional languages
+   - Implement language-specific improvement prompts
+   - Add language detection indicators
+   - Consider automatic language detection toggle
 
-2. Potential Improvements:
-   - Caching of available models
-   - Status indicators for backend health
-   - Model performance metrics
-   - Batch processing capabilities
+2. Future Considerations:
+   - Multi-language translation support
+   - Language-specific model selection
+   - Custom prompts per language
+   - Language preference settings
