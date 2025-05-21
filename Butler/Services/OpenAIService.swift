@@ -38,7 +38,7 @@ enum OpenAIError: LocalizedError {
 class OpenAIService {
     private let apiKey: String
     private let basePrompt: String
-    private let backend: AIBackend
+    private let backend: AIBackendType
     private let model: String
     private let baseURL: URL
     
