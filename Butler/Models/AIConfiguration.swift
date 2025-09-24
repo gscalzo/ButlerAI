@@ -15,5 +15,5 @@ enum AIBackendType: String, CaseIterable, Identifiable {
 }
 
 struct AIModelConstants {
-    static let defaultOpenAIModel = "gpt-4o-mini"
+    static let defaultOpenAIModel = "gpt-5-mini"
 }
