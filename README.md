@@ -52,7 +52,7 @@ ButlerAI is an elegant macOS menubar application that helps you improve your wri
 
      **OpenAI Setup**:
      - Enter your OpenAI API key
-     - Select a model (default: gpt-4o-mini)
+     - Select a model (default: gpt-5-mini)
 
      **Ollama Setup**:
      - [Install Ollama](https://ollama.ai/download)
