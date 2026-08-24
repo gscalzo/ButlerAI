@@ -5,6 +5,7 @@ import XCTest
 final class PasteboardSnapshotTests: XCTestCase {
     func testPasteboardSnapshotRestoresString() {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("ButlerTests.PasteboardSnapshot.Restore\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
         pasteboard.clearContents()
         pasteboard.setString("Original", forType: .string)
 
@@ -19,6 +20,7 @@ final class PasteboardSnapshotTests: XCTestCase {
 
     func testPasteboardSnapshotRestoresEmptyState() {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("ButlerTests.PasteboardSnapshot.Empty\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
         pasteboard.clearContents()
 
         let snapshot = PasteboardSnapshot(pasteboard: pasteboard)

@@ -1,113 +1,109 @@
-import Foundation
-import Carbon
 import AppKit
+import Combine
 
-class HotkeyManager {
-    private var eventHandler: EventHandlerRef?
-    private var monitorEvent: Any?
-    private var permissionTimer: Timer?
-    private let callback: () -> Void
-    
-    init(callback: @escaping () -> Void) {
-        self.callback = callback
-        if RuntimeEnvironment.isRunningTests {
-            log("Skipping accessibility check during tests")
-        } else {
-            setupAccessibilityCheck()
-        }
+/// Describes a global keyboard shortcut in one place so the hotkey monitor and the UI agree.
+struct KeyboardShortcutSpec: Equatable, Sendable {
+    let keyCode: UInt16
+    let modifiers: NSEvent.ModifierFlags
+    let displayString: String
+
+    /// The ⌃⌥⌘C shortcut that triggers "Improve Selected Text".
+    static let improveText = KeyboardShortcutSpec(
+        keyCode: 0x08, // 'c'
+        modifiers: [.control, .option, .command],
+        displayString: "⌃⌥⌘C"
+    )
+
+    /// True when the event carries this key code and exactly the required modifiers (⇧⌃⌥⌘C is a
+    /// different chord). Device-dependent bits and Caps Lock / Fn / keypad noise are ignored, and
+    /// key-repeat events never match so holding the chord triggers once.
+    func matches(_ event: NSEvent) -> Bool {
+        guard event.keyCode == keyCode, !event.isARepeat else { return false }
+        let flags = event.modifierFlags
+            .intersection(.deviceIndependentFlagsMask)
+            .subtracting([.capsLock, .function, .numericPad, .help])
+        return flags == modifiers
     }
-    
+}
+
+/// Registers a global key-down monitor for the improve-text shortcut whenever Accessibility
+/// access is available, and removes it when access is revoked.
+@MainActor
+final class HotkeyManager: ObservableObject {
+    nonisolated static let improveTextShortcut = KeyboardShortcutSpec.improveText
+
+    @Published private(set) var isRegistered = false
+
+    private let permissionService: AccessibilityPermissionService
+    private let shortcut: KeyboardShortcutSpec
+    private let callback: () -> Void
+    private var monitor: Any?
+    private var permissionSubscription: AnyCancellable?
+
+    init(permissionService: AccessibilityPermissionService,
+         shortcut: KeyboardShortcutSpec = HotkeyManager.improveTextShortcut,
+         callback: @escaping () -> Void) {
+        self.permissionService = permissionService
+        self.shortcut = shortcut
+        self.callback = callback
+    }
+
     deinit {
-        log("Cleaning up HotkeyManager")
-        if let handler = eventHandler {
-            RemoveEventHandler(handler)
-        }
-        if let monitor = monitorEvent {
+        if let monitor {
             NSEvent.removeMonitor(monitor)
         }
-        permissionTimer?.invalidate()
     }
-    
-    private func setupAccessibilityCheck() {
-        log("Setting up accessibility check")
-        
-        // Initial check
-        checkAccessibilityPermissions()
-        
-        // Periodic check if not granted
-        if !AXIsProcessTrusted() {
-            log("Starting permission check timer")
-            permissionTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
-                if AXIsProcessTrusted() {
-                    log("Accessibility permission detected")
-                    timer.invalidate()
-                    self?.onAccessibilityGranted()
+
+    /// Follows the permission state: registers the monitor when granted, removes it when revoked.
+    func start() {
+        guard permissionSubscription == nil else { return }
+        log("Starting hotkey manager for \(shortcut.displayString)")
+        permissionSubscription = permissionService.$isGranted
+            .removeDuplicates()
+            .sink { [weak self] granted in
+                guard let self else { return }
+                if granted {
+                    self.registerMonitor()
+                } else {
+                    self.unregisterMonitor()
                 }
             }
-        }
     }
-    
-    private func onAccessibilityGranted() {
-        log("Accessibility permission granted")
-        registerHotkey()
+
+    func stop() {
+        permissionSubscription?.cancel()
+        permissionSubscription = nil
+        unregisterMonitor()
     }
-    
-    private func checkAccessibilityPermissions() {
-        if !AXIsProcessTrusted() {
-            log("Warning: App is not trusted for accessibility", type: .warning)
-            let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-            AXIsProcessTrustedWithOptions(options)
-            
-            // Show alert about accessibility permissions
-            DispatchQueue.main.async {
-                let alert = NSAlert()
-                alert.messageText = "Accessibility Access Required"
-                alert.informativeText = """
-                    ButlerAI needs accessibility access to detect keyboard shortcuts.
-                    
-                    Please enable it in System Settings:
-                    1. Open System Settings
-                    2. Go to Privacy & Security > Accessibility
-                    3. Enable ButlerAI
-                    """
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "Open System Settings")
-                alert.addButton(withTitle: "Later")
-                
-                NSApp.activate(ignoringOtherApps: true)
-                if alert.runModal() == .alertFirstButtonReturn {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
-                }
-            }
-        } else {
-            log("App is trusted for accessibility")
-            registerHotkey()
-        }
-    }
-    
-    private func registerHotkey() {
-        log("Registering global hotkey ⌃⌥⌘C")
-        
-        // Set up monitoring of global keyboard events
-        monitorEvent = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self = self else {
-                log("Warning: Self is nil in hotkey handler", type: .warning)
-                return
-            }
-            
-            if event.modifierFlags.contains([.control, .option, .command]) &&
-               event.keyCode == 0x08 { // 'c' key
-                log("Global keyboard shortcut ⌃⌥⌘C detected")
-                DispatchQueue.main.async {
-                    self.callback()
-                }
+
+    private func registerMonitor() {
+        guard monitor == nil else { return }
+        log("Registering global hotkey \(shortcut.displayString)")
+
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            MainActor.assumeIsolated {
+                guard let self, self.shortcut.matches(event) else { return }
+                log("Global keyboard shortcut \(self.shortcut.displayString) detected")
+                self.callback()
             }
         }
-        
-        if monitorEvent == nil {
-            log("Error: Failed to register global monitor", type: .error)
-        } else {
+
+        isRegistered = monitor != nil
+        if isRegistered {
             log("Global keyboard monitor registered successfully")
+        } else {
+            log("Error: Failed to register global monitor", type: .error)
         }
+    }
+
+    private func unregisterMonitor() {
+        guard let monitor else {
+            isRegistered = false
+            return
+        }
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
+        isRegistered = false
+        log("Global keyboard monitor removed (accessibility access unavailable)", type: .warning)
     }
 }

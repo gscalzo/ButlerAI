@@ -44,6 +44,16 @@
 		E5FE039E6F71477E8E2ECD69 /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD7276DAC00849B4AA1BA1AC /* KeychainServiceTests.swift */; };
 		1D20F2E64FD54F9684A55E3A /* PasteboardSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00A170BABAFD48EDA419AE3C /* PasteboardSnapshotTests.swift */; };
 		040C4E76D0DD42A29ADA195A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 63CC1E89779B4C2CB8BDABE2 /* Assets.xcassets */; };
+		4C7489689A034D31AF13F4BB /* AccessibilityPermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50D2CBC5642D494D939E782E /* AccessibilityPermissionService.swift */; };
+		62DBC05A863743F9A1C4F295 /* AccessibilityPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 959499F512674E8887BE4A40 /* AccessibilityPermissionView.swift */; };
+		B4DD6AAFBC8A4F9E8F9F91CA /* HTTPJSONClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61F1B3D2B8F740B68F657E0E /* HTTPJSONClient.swift */; };
+		B1C007DD93594DC98875B64D /* AIServiceError.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA66A0AA3A5747BA8AF3ABF7 /* AIServiceError.swift */; };
+		543627794C0349F2AF8EF2DB /* AlertPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44081282A4D24DBFAC0472A4 /* AlertPresenter.swift */; };
+		F4FE05DAA49F43DD9C1FDE67 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF9B9443C7A42CA817415CC /* MockURLProtocol.swift */; };
+		74B70DC4E56948658424A5D1 /* OllamaClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7721472581A416290F6AF43 /* OllamaClientTests.swift */; };
+		1390E0E0A8754EFE981CA93E /* AccessibilityPermissionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7854AB95D6C842A7B7654ED7 /* AccessibilityPermissionServiceTests.swift */; };
+		2D6F2FA8A1644974A04910B7 /* SettingsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E191783B9324D189A99540C /* SettingsServiceTests.swift */; };
+		B7CBE6D8163C4B78AAAB62C3 /* ClipboardManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62DBDC662E2B410BB3F4742F /* ClipboardManagerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -70,6 +80,16 @@
 		CD7276DAC00849B4AA1BA1AC /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		00A170BABAFD48EDA419AE3C /* PasteboardSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteboardSnapshotTests.swift; sourceTree = "<group>"; };
 		63CC1E89779B4C2CB8BDABE2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		50D2CBC5642D494D939E782E /* AccessibilityPermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/AccessibilityPermissionService.swift; sourceTree = "<group>"; };
+		959499F512674E8887BE4A40 /* AccessibilityPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Views/AccessibilityPermissionView.swift; sourceTree = "<group>"; };
+		61F1B3D2B8F740B68F657E0E /* HTTPJSONClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/HTTPJSONClient.swift; sourceTree = "<group>"; };
+		FA66A0AA3A5747BA8AF3ABF7 /* AIServiceError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/AIServiceError.swift; sourceTree = "<group>"; };
+		44081282A4D24DBFAC0472A4 /* AlertPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services/AlertPresenter.swift; sourceTree = "<group>"; };
+		2AF9B9443C7A42CA817415CC /* MockURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
+		E7721472581A416290F6AF43 /* OllamaClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaClientTests.swift; sourceTree = "<group>"; };
+		7854AB95D6C842A7B7654ED7 /* AccessibilityPermissionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermissionServiceTests.swift; sourceTree = "<group>"; };
+		1E191783B9324D189A99540C /* SettingsServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsServiceTests.swift; sourceTree = "<group>"; };
+		62DBDC662E2B410BB3F4742F /* ClipboardManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManagerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,6 +131,11 @@
 		4E706B482D773A27007AEEDA /* Butler */ = {
 			isa = PBXGroup;
 			children = (
+				44081282A4D24DBFAC0472A4 /* AlertPresenter.swift */,
+				FA66A0AA3A5747BA8AF3ABF7 /* AIServiceError.swift */,
+				61F1B3D2B8F740B68F657E0E /* HTTPJSONClient.swift */,
+				959499F512674E8887BE4A40 /* AccessibilityPermissionView.swift */,
+				50D2CBC5642D494D939E782E /* AccessibilityPermissionService.swift */,
 				74C056324FF845BCB4911848 /* AppIntentsSupport.swift */,
 				63CC1E89779B4C2CB8BDABE2 /* Assets.xcassets */,
 				0838B3203E07418FAD154B8A /* ButlerApp.swift */,
@@ -134,6 +159,11 @@
 		4E706B5A2D773A28007AEEDA /* ButlerTests */ = {
 			isa = PBXGroup;
 			children = (
+				62DBDC662E2B410BB3F4742F /* ClipboardManagerTests.swift */,
+				1E191783B9324D189A99540C /* SettingsServiceTests.swift */,
+				7854AB95D6C842A7B7654ED7 /* AccessibilityPermissionServiceTests.swift */,
+				E7721472581A416290F6AF43 /* OllamaClientTests.swift */,
+				2AF9B9443C7A42CA817415CC /* MockURLProtocol.swift */,
 				D2E034260FF84BDC8704AE58 /* ButlerTests.swift */,
 				CD7276DAC00849B4AA1BA1AC /* KeychainServiceTests.swift */,
 				CFEEDC4D3E964C9DB9D18D4A /* OpenAIServiceTests.swift */,
@@ -247,6 +277,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				543627794C0349F2AF8EF2DB /* AlertPresenter.swift in Sources */,
+				B1C007DD93594DC98875B64D /* AIServiceError.swift in Sources */,
+				B4DD6AAFBC8A4F9E8F9F91CA /* HTTPJSONClient.swift in Sources */,
+				62DBC05A863743F9A1C4F295 /* AccessibilityPermissionView.swift in Sources */,
+				4C7489689A034D31AF13F4BB /* AccessibilityPermissionService.swift in Sources */,
 			
 				F4A08CB34FC74497A7484C5C /* AppIntentsSupport.swift in Sources */,
 				71F14E4D28ED4237B794BBB8 /* ButlerApp.swift in Sources */,
@@ -270,6 +305,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B7CBE6D8163C4B78AAAB62C3 /* ClipboardManagerTests.swift in Sources */,
+				2D6F2FA8A1644974A04910B7 /* SettingsServiceTests.swift in Sources */,
+				1390E0E0A8754EFE981CA93E /* AccessibilityPermissionServiceTests.swift in Sources */,
+				74B70DC4E56948658424A5D1 /* OllamaClientTests.swift in Sources */,
+				F4FE05DAA49F43DD9C1FDE67 /* MockURLProtocol.swift in Sources */,
 			
 				4B4C62AB276C47168379766A /* ButlerTests.swift in Sources */,
 				1D1A2B7FA316474E89325DAA /* OpenAIServiceTests.swift in Sources */,

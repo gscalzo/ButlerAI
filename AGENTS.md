@@ -4,10 +4,10 @@
 ButlerAI is a macOS menubar app that improves selected text using AI. It runs without a dock icon, listens for a global hotkey (⌃⌥⌘C), copies the current selection, sends it to an AI backend (OpenAI or local Ollama), then pastes the improved text back while preserving clipboard contents.
 
 ## High-Level Architecture
-- **UI shell:** SwiftUI `MenuBarExtra` with settings and logs windows.
+- **UI shell:** SwiftUI `MenuBarExtra` with a tabbed settings window (AI / Prompt / Permissions) and a logs window.
 - **State orchestration:** `AppState` coordinates services, processing state, errors, and window lifecycle.
-- **Services layer:** Hotkey handling, clipboard operations, AI requests, language handling, logging.
-- **Settings persistence:** `@AppStorage` in `SettingsService` for backend selection and configuration.
+- **Services layer:** Accessibility permission monitoring, hotkey handling, clipboard operations, AI requests (shared `HTTPJSONClient`), language handling, logging.
+- **Settings persistence:** `@AppStorage` in `SettingsService` (injectable `UserDefaults`), API key in the Keychain via `SecretStoring`, versioned one-time migrations.
 
 ## Key Components
 - `Butler/ButlerApp.swift`
@@ -15,21 +15,35 @@ ButlerAI is a macOS menubar app that improves selected text using AI. It runs wi
   - Handles menu bar UI, settings window, log window, and end-to-end “improve text” flow.
   - Uses `MenuBarExtra` with animated icon during processing.
 
+- `Butler/Services/AccessibilityPermissionService.swift`
+  - `@MainActor` observable source of truth for the macOS Accessibility permission (`isGranted`).
+  - Polls only while access is missing, refreshes when the app becomes active, can prompt (`requestAccess()`) and open System Settings.
+  - `AccessibilityPermissionChecking` protocol makes it testable without touching the real permission.
+
 - `Butler/Services/HotkeyManager.swift`
-  - Watches accessibility permission with a 2s timer.
-  - Uses a global keyboard monitor to detect ⌃⌥⌘C.
-  - Shows a permission prompt and opens System Settings when needed.
+  - `KeyboardShortcutSpec` is the single definition of ⌃⌥⌘C (`HotkeyManager.improveTextShortcut`).
+  - Subscribes to the permission service and (un)registers the global `NSEvent` monitor as access is granted/revoked. No alerts or timers of its own.
+
+- `Butler/Views/AccessibilityPermissionView.swift`
+  - `AccessibilityPermissionView`: Settings → Permissions section (status, how-to, Open System Settings / Request Access / Check Again).
+  - `AccessibilityStatusBanner`: compact warning shown in the menubar menu while access is missing.
 
 - `Butler/Services/ClipboardManager.swift`
-  - Simulates **Cmd+C** to capture selection and **Cmd+V** to paste.
-  - Preserves and restores previous clipboard contents.
-  - Uses `CGEvent` and short sleeps to allow pasteboard updates.
+  - Simulates **Cmd+C** to capture selection and **Cmd+V** to paste through the injectable `KeystrokeSimulating` protocol.
+  - Preserves and restores previous clipboard contents; `restorePreviousClipboard()` must be called if the flow fails after the copy.
+  - Treats an unchanged pasteboard after Cmd+C as "no selection" (never improves stale clipboard content).
 
-- `Butler/Services/OpenAIService.swift`
-  - Supports **OpenAI** and **Ollama** backends.
-  - OpenAI endpoint: `.../v1/chat/completions` (supports custom base URL).
-  - Ollama endpoint: `.../api/chat`; models list: `.../api/tags`.
-  - Sends a system prompt + user content message array.
+- `Butler/Services/OpenAIService.swift` (`OpenAIClient`)
+  - OpenAI-only client (Ollama lives in `OllamaClient`). Endpoint: `.../v1/chat/completions` (custom base URL supported).
+  - GPT-5-family / o-series models get `max_completion_tokens` (16k, shared with reasoning) + `reasoning_effort`; other models get `max_tokens` + `temperature` (`OpenAIClient.usesReasoningParameters(model:)`). `reasoning_effort: none` is only sent to the curated GPT-5.6 models (`supportedReasoningEfforts(model:)`); `finish_reason: "length"` is rejected as `AIServiceError.responseTruncated` so a cut-off rewrite is never pasted.
+  - Default model: `AIModelConstants.defaultOpenAIModel` = `gpt-5.6-luna`; known options in `OpenAIModelCatalog`.
+
+- `Butler/Services/OllamaClient.swift`
+  - Endpoint: `.../api/chat`; models list: `.../api/tags`.
+
+- `Butler/Services/HTTPJSONClient.swift` + `Butler/Services/AIServiceError.swift`
+  - Shared JSON transport (injectable `URLSession`, 180s timeout, decodes both OpenAI `{error:{message}}` and Ollama `{error:"…"}` envelopes) and the `AIServiceError` enum used by both clients.
+  - `HTTPURLNormalizer` accepts scheme-less server addresses (`localhost:1234/v1`, `myhost:11434`). `Info.plist` allows local networking (`NSAllowsLocalNetworking`) so plain-http LAN servers work.
 
 - `Butler/Services/LanguageService.swift`
   - Detects Italian text using `NaturalLanguage`.
@@ -40,42 +54,44 @@ ButlerAI is a macOS menubar app that improves selected text using AI. It runs wi
   - Log window supports search, filtering, auto-scroll, copy, clear.
 
 - `Butler/Views/SettingsView.swift`
-  - Backend switcher (OpenAI vs Ollama).
-  - OpenAI key input; Ollama URL + model picker with refresh.
-  - Improvement prompt editor.
+  - `TabView` (`SettingsTab`: ai / prompt / permissions); `AppState.settingsTab` selects the tab programmatically.
+  - AI tab: backend switcher, OpenAI key, model picker (catalog + Custom…), reasoning effort, base URL; Ollama URL + model picker with refresh.
+  - Prompt tab: editor + Reset to Default. Permissions tab: `AccessibilityPermissionView` + shortcut.
 
 - `Butler/Models/AIConfiguration.swift`
-  - `AIBackendType` enum.
-  - Default model constant: `gpt-4o-mini`.
+  - `AIBackendType`, `AIModelConstants` (default `gpt-5.6-luna`, previous defaults for migration), `OpenAIModelCatalog`, `OpenAIReasoningEffort`.
 
 ## Data Flow (Runtime)
-1. User presses ⌃⌥⌘C.
+1. User presses ⌃⌥⌘C (only registered while Accessibility access is granted).
 2. `HotkeyManager` triggers `AppState.improveSelectedText()`.
 3. `ClipboardManager` captures selection via Cmd+C.
-4. `LanguageService` optionally translates Italian and calls `OpenAIService`.
+4. `LanguageService` optionally translates Italian and calls the active `TextImproving` client.
 5. Improved text returned to `ClipboardManager` for Cmd+V paste.
-6. Previous clipboard contents are restored.
+6. Previous clipboard contents are restored (also on failure).
 
 ## Settings & Persistence
-`SettingsService` stores:
-- `openaiKey`
+`SettingsService` stores (keys in `SettingsService.Keys`):
+- `openaiKey` (Keychain)
+- `openaiBaseURL`
 - `aiBackend` (OpenAI / Ollama)
-- `ollamaURL` (also reused as a custom OpenAI base URL when backend is OpenAI and URL is non-default)
-- `selectedModel`
+- `ollamaURL`
+- `openAIModel` / `ollamaModel` (per-backend; `activeModel` picks the current one)
+- `openAIReasoningEffort`
 - `improvementPrompt`
+- `settingsSchemaVersion` — bump `currentSchemaVersion` and extend `migrateIfNeeded()` for one-time migrations (v2 split the legacy `selectedModel` and moved old default models to Luna).
 
 ## Permissions & OS Integration
 - Requires **Accessibility** permissions for global key monitoring and clipboard events.
 - Uses `AXIsProcessTrustedWithOptions` for prompting and `NSEvent.addGlobalMonitorForEvents` for hotkey capture.
 
 ## Observed Quirks / Implementation Notes
-- `ClipboardManager` still uses `print()` for logging, while other areas use `LoggerService`.
-- OpenAI base URL customization piggybacks on `ollamaURL` when backend is OpenAI and URL differs from `http://localhost:11434`.
-- AI request uses a chat payload with `system` and `user` messages and a fixed `temperature: 0.7`.
+- GPT-5-family models reject `max_tokens`/`temperature` on Chat Completions — keep the parameter split in `OpenAIClient` when adding models.
+- Accessibility polling is intentionally cheap (2s, only while not granted) and stops itself once granted.
+- Modal alerts go through `AlertPresenter`.
 
 ## Build & Test
-- Open `Butler.xcodeproj` in Xcode (macOS 12+).
-- Tests live in `ButlerTests` (UI tests removed).
+- Open `Butler.xcodeproj` in Xcode (deployment target macOS 15.2).
+- Tests live in `ButlerTests` (UI tests removed). Network clients are tested with `MockURLProtocol`; settings tests use an isolated `UserDefaults` suite and an in-memory `SecretStoring`.
 
 ## Common Entry Points
 - App: `Butler/ButlerApp.swift`
@@ -83,6 +99,7 @@ ButlerAI is a macOS menubar app that improves selected text using AI. It runs wi
 - Settings: `Butler/Views/SettingsView.swift`
 - Clipboard: `Butler/Services/ClipboardManager.swift`
 - Hotkey: `Butler/Services/HotkeyManager.swift`
+- Accessibility permission: `Butler/Services/AccessibilityPermissionService.swift`
 - Logs UI: `Butler/Views/LogView.swift`
 
 # unit tests
@@ -114,7 +131,7 @@ UI tests have been removed; unit tests are run via `make test`.
 
 # Makefile
 Use `Makefile` targets for common tasks:
-- `make test` (unit tests only, executes tests)
+- `make test` (unit tests only, executes tests; `LOG_DIR=<dir>` overrides the log location, default `/tmp`)
 - `make test-build` (build-for-testing only)
 - `make build`
 - `make archive`

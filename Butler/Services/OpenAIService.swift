@@ -1,217 +1,202 @@
 import Foundation
 
-// AIBackend enum was here, now removed. AIBackendType from AIConfiguration.swift is used.
-
-enum OpenAIError: LocalizedError {
-    case missingApiKey
-    case networkError(underlyingError: Error)
-    case invalidResponse(statusCode: Int, responseBody: String?)
-    case responseDecodingError(underlyingError: Error)
-    case noContentInResponse
-    case serviceError(message: String) // For errors reported by the AI service itself
-    case unknownError(message: String)
-
-    var errorDescription: String? {
-        switch self {
-        case .missingApiKey:
-            return "The API key is missing or not configured."
-        case .networkError(let underlyingError):
-            return "A network error occurred: \(underlyingError.localizedDescription)"
-        case .invalidResponse(let statusCode, let responseBody):
-            var bodyHint = ""
-            if let body = responseBody, !body.isEmpty {
-                bodyHint = " Body: \(body.prefix(100))..."
-            }
-            return "Received an invalid response from the server (HTTP \(statusCode)).\(bodyHint)"
-        case .responseDecodingError(let underlyingError):
-            return "Failed to decode the server's response: \(underlyingError.localizedDescription)"
-        case .noContentInResponse:
-            return "The server's response did not contain any content."
-        case .serviceError(let message):
-            return message // This is the message directly from the AI service's error response
-        case .unknownError(let message):
-            return "An unknown error occurred: \(message)"
-        }
-    }
-}
-
+/// Client for OpenAI's Chat Completions API. Also works with OpenAI-compatible servers via a custom base URL.
 final class OpenAIClient: TextImproving {
+    static let defaultBaseURL = URL(string: "https://api.openai.com/v1")!
+    /// Output budget for legacy (non-reasoning) models: `max_tokens` covers visible output only.
+    static let maxOutputTokens = 4096
+    /// Budget for reasoning models: `max_completion_tokens` covers reasoning *and* visible output,
+    /// so it needs headroom or the answer is cut off with `finish_reason: "length"`.
+    static let maxReasoningCompletionTokens = 16_000
+    static let legacyTemperature = 0.7
+
     private let apiKey: String
     private let basePrompt: String
-    private let backend: AIBackendType
     private let model: String
     private let baseURL: URL
+    private let reasoningEffort: OpenAIReasoningEffort
+    private let http: HTTPJSONClient
 
-    static func chatEndpoint(for backend: AIBackendType, baseURL: URL) -> URL {
-        switch backend {
-        case .openAI:
-            if baseURL.absoluteString.hasSuffix("/v1") {
-                return baseURL.appendingPathComponent("chat/completions")
-            }
-            if baseURL.absoluteString == "https://api.openai.com" {
-                return baseURL.appendingPathComponent("v1/chat/completions")
-            }
-            return baseURL.appendingPathComponent("v1/chat/completions")
-        case .ollama:
-            return baseURL.appendingPathComponent("api/chat")
-        }
-    }
-    
-    init(apiKey: String, prompt: String, model: String = AIModelConstants.defaultOpenAIModel, serverURL: String) {
-        self.apiKey = apiKey
-        self.backend = .openAI
-        self.model = model
-        
-        var effectiveBaseURL: String
-        switch backend {
-        case .openAI:
-            if serverURL.isEmpty || serverURL == "https://api.openai.com/v1" {
-                effectiveBaseURL = "https://api.openai.com/v1" 
-            } else {
-                // Assuming custom OpenAI-compatible endpoint
-                effectiveBaseURL = serverURL 
-            }
-        case .ollama:
-            // Ollama typically uses /api at the root of its server URL for specific actions
-            // The actual path like /chat or /tags is appended later or in specific methods.
-            effectiveBaseURL = serverURL 
-        }
-        // Ensure baseURL is just the server root for ollama, path will be appended in methods.
-        // For OpenAI, it can include /v1 if standard, or be the root of a compatible API.
-        self.baseURL = URL(string: effectiveBaseURL)!
-        
+    init(
+        apiKey: String,
+        prompt: String,
+        model: String = AIModelConstants.defaultOpenAIModel,
+        serverURL: String,
+        reasoningEffort: OpenAIReasoningEffort = .default,
+        session: URLSession = .shared
+    ) {
+        self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.basePrompt = prompt
-        log("OpenAI client initialized with model: \(model) (API Key present: \(!apiKey.isEmpty)), BaseURL: \(self.baseURL.absoluteString)")
+        self.model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.baseURL = Self.resolveBaseURL(serverURL)
+        self.reasoningEffort = reasoningEffort
+        self.http = HTTPJSONClient(session: session)
+        log("OpenAI client initialized with model: \(self.model) (API key present: \(!self.apiKey.isEmpty)), base URL: \(baseURL.absoluteString)")
     }
-    
-    func improveText(_ text: String) async throws -> String {
-        log("Starting text improvement request")
-        let effectiveURL = Self.chatEndpoint(for: backend, baseURL: baseURL)
-        
-        var request = URLRequest(url: effectiveURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        if backend == .openAI {
-             guard !apiKey.isEmpty else {
-                log("Error: API key is empty for OpenAI", type: .error)
-                throw OpenAIError.missingApiKey
-            }
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    // MARK: - URL handling
+
+    /// Turns the user-provided server URL into a usable base URL. Accepts scheme-less input such as
+    /// `localhost:1234/v1` and falls back to the official API when blank or malformed.
+    static func resolveBaseURL(_ serverURL: String) -> URL {
+        HTTPURLNormalizer.url(from: serverURL, defaultScheme: "https") ?? defaultBaseURL
+    }
+
+    /// `<base>/chat/completions` when the base already ends in `/v1`, otherwise `<base>/v1/chat/completions`.
+    static func chatEndpoint(baseURL: URL) -> URL {
+        var path = baseURL.path
+        while path.hasSuffix("/") {
+            path.removeLast()
         }
-        
-        log("Preparing AI request for model \(model) with text length: \(text.count)")
-        
-        // Following official API structure
-        let payload: [String: Any] = [
-            "model": model,
-            "messages": [
-                [
-                    "role": "system",
-                    "content": basePrompt
-                ],
-                [
-                    "role": "user",
-                    "content": text
-                ]
-            ],
-            "temperature": 0.7,
-            "max_tokens": 4096,
-            "top_p": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0
-        ]
-        
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-            log("Request payload prepared")
-            
-            let (data, response) = try await URLSession.shared.data(for: request)
-            log("Received response from AI service")
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                log("Error: Invalid response type from server (not HTTPURLResponse)", type: .error)
-                throw OpenAIError.invalidResponse(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0, responseBody: "Response was not HTTPURLResponse")
-            }
-            
-            if httpResponse.statusCode != 200 {
-                let responseBody = String(data: data, encoding: .utf8)
-                log("HTTP Error: \(httpResponse.statusCode). Body: \(responseBody ?? "nil")", type: .error)
-                if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
-                    log("AI Service Error: \(errorResponse.error.message)", type: .error)
-                    throw OpenAIError.serviceError(message: errorResponse.error.message)
-                }
-                throw OpenAIError.invalidResponse(statusCode: httpResponse.statusCode, responseBody: responseBody)
-            }
-            
-            log("Parsing AI service response")
-            let apiResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
-            
-            guard let content = apiResponse.choices.first?.message.content else {
-                log("Error: No content in response", type: .error)
-                throw OpenAIError.noContentInResponse
-            }
-            
-            let finalContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-            log("Successfully extracted improved text (length: \(finalContent.count))")
-            return finalContent
-            
-        } catch let error as DecodingError {
-            log("Error decoding OpenAI response: \(error.localizedDescription)", type: .error)
-            throw OpenAIError.responseDecodingError(underlyingError: error)
-        } catch let error as OpenAIError {
-            throw error // Re-throw OpenAIError explicitly
-        } catch {
-            log("Error during OpenAI request: \(error.localizedDescription)", type: .error)
-            throw OpenAIError.networkError(underlyingError: error)
+        if path.hasSuffix("/v1") {
+            return baseURL.appendingPathComponent("chat/completions")
         }
+        return baseURL.appendingPathComponent("v1/chat/completions")
+    }
+
+    // MARK: - Model capabilities
+
+    /// GPT-5-family and o-series models are reasoning models: they take `max_completion_tokens` and
+    /// `reasoning_effort`, and reject sampling parameters such as `temperature` or `max_tokens`.
+    static func usesReasoningParameters(model: String) -> Bool {
+        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return ["gpt-5", "o1", "o3", "o4"].contains { normalized.hasPrefix($0) }
+    }
+
+    /// Reasoning effort values a model accepts. `none` only exists from GPT-5.1 onward, so it is offered
+    /// for the curated GPT-5.6 catalog only; older reasoning models reject it with HTTP 400.
+    static func supportedReasoningEfforts(model: String) -> [OpenAIReasoningEffort] {
+        guard usesReasoningParameters(model: model) else { return [] }
+        if OpenAIModelCatalog.isKnown(model) {
+            return OpenAIReasoningEffort.allCases
+        }
+        return OpenAIReasoningEffort.allCases.filter { $0 != .none }
+    }
+
+    /// The effort actually sent: the requested one when the model supports it, otherwise the default.
+    static func effectiveReasoningEffort(_ requested: OpenAIReasoningEffort, model: String) -> OpenAIReasoningEffort {
+        supportedReasoningEfforts(model: model).contains(requested) ? requested : .default
+    }
+
+    // MARK: - Requests
+
+    func makeRequestBody(for text: String) -> OpenAIChatRequest {
+        var request = OpenAIChatRequest(
+            model: model,
+            messages: [.system(basePrompt), .user(text)]
+        )
+        if Self.usesReasoningParameters(model: model) {
+            request.maxCompletionTokens = Self.maxReasoningCompletionTokens
+            request.reasoningEffort = Self.effectiveReasoningEffort(reasoningEffort, model: model).rawValue
+        } else {
+            request.maxTokens = Self.maxOutputTokens
+            request.temperature = Self.legacyTemperature
+        }
+        return request
+    }
+
+    func improveText(_ text: String) async throws -> String {
+        log("Starting OpenAI text improvement request")
+        guard !apiKey.isEmpty else {
+            log("Error: API key is empty for OpenAI", type: .error)
+            throw AIServiceError.missingApiKey
+        }
+        guard !model.isEmpty else {
+            log("Error: no OpenAI model configured", type: .error)
+            throw AIServiceError.missingModel
+        }
+
+        let endpoint = Self.chatEndpoint(baseURL: baseURL)
+        log("Preparing OpenAI request for model \(model) with text length: \(text.count)")
+
+        let response = try await http.post(
+            endpoint,
+            body: makeRequestBody(for: text),
+            headers: ["Authorization": "Bearer \(apiKey)"],
+            as: OpenAIResponse.self
+        )
+
+        let choice = response.choices.first
+        if choice?.finishReason == "length" {
+            // A cut-off rewrite must never be pasted over the user's text.
+            log("Error: response truncated by the token budget (finish_reason=length)", type: .error)
+            throw AIServiceError.responseTruncated
+        }
+
+        let message = choice?.message
+        let content = message?.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !content.isEmpty else {
+            if let refusal = message?.refusal, !refusal.isEmpty {
+                log("Model refused the request: \(refusal)", type: .warning)
+            }
+            log("Error: No content in response", type: .error)
+            throw AIServiceError.noContentInResponse
+        }
+
+        log("Successfully extracted improved text (length: \(content.count))")
+        return content
     }
 }
 
-// Response structures following OpenAI API
-struct OpenAIResponse: Codable {
-    let id: String
-    let object: String
-    let created: Int
-    let model: String
+// MARK: - Wire formats
+
+/// Chat Completions request. Optional fields are omitted from the JSON when nil, so only the
+/// parameters valid for the selected model are sent.
+struct OpenAIChatRequest: Codable, Equatable {
+    var model: String
+    var messages: [ChatMessage]
+    var maxCompletionTokens: Int?
+    var reasoningEffort: String?
+    var maxTokens: Int?
+    var temperature: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case messages
+        case maxCompletionTokens = "max_completion_tokens"
+        case reasoningEffort = "reasoning_effort"
+        case maxTokens = "max_tokens"
+        case temperature
+    }
+}
+
+/// Chat Completions response. Everything but `choices` is optional because OpenAI-compatible
+/// servers frequently omit metadata such as `id` or `usage`.
+struct OpenAIResponse: Decodable {
+    let id: String?
+    let object: String?
+    let created: Int?
+    let model: String?
     let choices: [Choice]
-    let usage: Usage
-    
-    struct Choice: Codable {
-        let index: Int
+    let usage: Usage?
+
+    struct Choice: Decodable {
+        let index: Int?
         let message: Message
         let finishReason: String?
-        
+
         enum CodingKeys: String, CodingKey {
             case index, message
             case finishReason = "finish_reason"
         }
     }
-    
-    struct Message: Codable {
-        let role: String
-        let content: String
+
+    struct Message: Decodable {
+        let role: String?
+        /// `nil` when the model returns a `refusal` instead of content.
+        let content: String?
+        let refusal: String?
     }
-    
-    struct Usage: Codable {
-        let promptTokens: Int
-        let completionTokens: Int
-        let totalTokens: Int
-        
+
+    struct Usage: Decodable {
+        let promptTokens: Int?
+        let completionTokens: Int?
+        let totalTokens: Int?
+
         enum CodingKeys: String, CodingKey {
             case promptTokens = "prompt_tokens"
             case completionTokens = "completion_tokens"
             case totalTokens = "total_tokens"
         }
     }
-}
-
-struct OpenAIErrorResponse: Codable {
-    struct ErrorDetail: Codable {
-        let message: String
-        let type: String?
-        let param: String?
-        let code: String?
-    }
-    let error: ErrorDetail
 }

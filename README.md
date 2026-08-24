@@ -52,7 +52,9 @@ ButlerAI is an elegant macOS menubar application that helps you improve your wri
 
      **OpenAI Setup**:
      - Enter your OpenAI API key
-     - Select a model (default: gpt-4o-mini)
+     - Pick a model — **GPT-5.6 Luna** (`gpt-5.6-luna`, the default: fastest and cheapest), Terra, Sol, or a custom model ID
+     - Optionally tune the reasoning effort (Low by default — plenty for text polishing)
+     - Advanced: point the Base URL at any OpenAI-compatible server
 
      **Ollama Setup**:
      - [Install Ollama](https://ollama.ai/download)
@@ -61,8 +63,9 @@ ButlerAI is an elegant macOS menubar application that helps you improve your wri
      - Choose from available local models
 
 2. **Required Permissions**:
-   - Grant Accessibility permissions when prompted
-   - These are needed for the keyboard shortcut functionality
+   - macOS will ask for **Accessibility** access on first launch; it is needed for the global shortcut and for copying/pasting the selection
+   - You can check and fix this any time from **Settings → Permissions**: it shows whether access is granted and has one-click buttons to open System Settings, re-request access, or re-check
+   - While access is missing, the menubar menu shows a warning banner with a "Fix…" shortcut to that tab
 
 ## Usage 📝
 
@@ -100,7 +103,7 @@ ButlerAI provides clear feedback when something goes wrong:
 
 ## Requirements 📋
 
-- macOS 12.0 or later
+- macOS 15.2 or later
 - One of the following:
   - OpenAI API key (for OpenAI backend)
   - Ollama installation (for local AI backend)
@@ -122,7 +125,15 @@ Built with:
 - AppKit Integration
 - OpenAI API / Ollama Integration
 - Secure Networking
-- Xcode 16.2.0 (required for builds)
+- Xcode 16.2 or later (required for builds)
+
+### Building & Testing
+
+```bash
+make test         # run unit tests (LOG_DIR=<dir> to redirect xcodebuild logs, default /tmp)
+make build        # build the app
+make archive      # archive the app
+```
 
 ### Building Releases
 
