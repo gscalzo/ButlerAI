@@ -5,7 +5,7 @@ import Combine
 @MainActor
 final class AppState: ObservableObject {
     let settingsService: SettingsService
-    let accessibilityPermissions = AccessibilityPermissionService()
+    let accessibilityPermissions = AccessibilityPermissionService(checker: AppState.makePermissionChecker())
 
     @Published private(set) var isProcessing = false
     @Published var settingsTab: SettingsTab = .ai
@@ -48,6 +48,11 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Setup
+
+    /// The test host must never query the Accessibility API (see `DeniedAccessibilityPermissionChecker`).
+    private static func makePermissionChecker() -> AccessibilityPermissionChecking {
+        RuntimeEnvironment.isRunningTests ? DeniedAccessibilityPermissionChecker() : SystemAccessibilityPermissionChecker()
+    }
 
     private static func makeTextImprover(from settings: SettingsService) -> TextImproving {
         switch settings.aiBackend {
@@ -99,9 +104,24 @@ final class AppState: ObservableObject {
         settingsTab = tab
         if let openSettingsHandler {
             openSettingsHandler()
-        } else {
-            log("Cannot open Settings: no handler registered yet", type: .error)
+        } else if !Self.openSettingsViaMainMenu() {
+            log("Cannot open Settings: no handler registered and no Settings menu item found", type: .error)
+            return
         }
+        // LSUIElement apps do not come to the front on their own.
+        NSApp.activate()
+    }
+
+    /// Fallback when no SwiftUI `openSettings` action has been captured yet: trigger the
+    /// app menu's own "Settings…" item, which SwiftUI wires to the Settings scene.
+    private static func openSettingsViaMainMenu() -> Bool {
+        guard let appMenu = NSApp.mainMenu?.items.first?.submenu else { return false }
+        let settingsSelector = Selector(("showSettingsWindow:"))
+        let item = appMenu.items.first { $0.action == settingsSelector }
+            ?? appMenu.items.first { $0.title.localizedCaseInsensitiveContains("Settings") }
+        guard let item, let action = item.action else { return false }
+        log("Opening Settings via the app menu item “\(item.title)”")
+        return NSApp.sendAction(action, to: item.target, from: item)
     }
 
     private func improveSelectedText() async {
@@ -216,6 +236,7 @@ struct MenuBarLabel: View {
     var body: some View {
         StatusIcon(isProcessing: appState.isProcessing)
             .onAppear {
+                log("Settings handler registered from the menu bar label")
                 appState.openSettingsHandler = { openSettings() }
             }
     }
@@ -256,9 +277,12 @@ struct MenuContentView: View {
                 HStack(spacing: 8) {
                     StatusIcon(isProcessing: appState.isProcessing)
                         .frame(width: 18, height: 18)
-                    Text("ButlerAI")
+                    Text(AppInfo.name)
                         .font(.headline)
                 }
+                Text(AppInfo.versionDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text("\(settings.aiBackend.displayName) · \(settings.activeModel)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -274,7 +298,11 @@ struct MenuContentView: View {
 
             if !permissions.isGranted {
                 AccessibilityStatusBanner(service: permissions) {
-                    appState.openSettings(tab: .permissions)
+                    // Call the SwiftUI action directly: the menu is flattened into NSMenu items,
+                    // so nothing here can rely on onAppear having run.
+                    appState.settingsTab = .permissions
+                    openSettings()
+                    NSApp.activate()
                 }
 
                 Divider()

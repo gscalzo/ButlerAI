@@ -42,11 +42,15 @@ struct AccessibilityPermissionView: View {
             Text("1. Open System Settings")
             Text("2. Go to Privacy & Security › Accessibility")
             Text("3. Turn on ButlerAI")
+            Text("If ButlerAI is not in the list, click + and choose it from the Applications folder, or drag it in from Finder (use “Reveal App in Finder” below).")
+                .padding(.top, 2)
+            Text("If ButlerAI is already listed and switched on (for example after an update), switch it off and on again, or remove it with − and add it back.")
         }
         .font(.callout)
         .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("How to enable: open System Settings, go to Privacy and Security, Accessibility, then turn on ButlerAI.")
+        .accessibilityLabel("How to enable: open System Settings, go to Privacy and Security, Accessibility, then turn on ButlerAI. If it is already listed and on, switch it off and on again, or remove it and add it back.")
     }
 
     private var actionButtons: some View {
@@ -67,6 +71,11 @@ struct AccessibilityPermissionView: View {
                     service.requestAccess()
                 }
                 .accessibilityHint("Asks macOS to show the Accessibility permission prompt.")
+
+                Button("Reveal App in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+                }
+                .accessibilityHint("Shows ButlerAI in Finder so you can drag it into the Accessibility list.")
             }
 
             Button("Check Again") {
@@ -92,6 +101,7 @@ struct AccessibilityPermissionView: View {
 /// Kept to plain `Label` + `Button` children so SwiftUI can flatten it into menu items.
 struct AccessibilityStatusBanner: View {
     @ObservedObject var service: AccessibilityPermissionService
+    /// Opens ButlerAI's own Settings › Permissions tab.
     var onOpenSettings: () -> Void
 
     var body: some View {
@@ -101,8 +111,13 @@ struct AccessibilityStatusBanner: View {
                 .foregroundStyle(Color.orange)
                 .accessibilityLabel("Accessibility access required")
 
-            Button("Fix Accessibility Access…", action: onOpenSettings)
-                .accessibilityHint("Opens ButlerAI settings to grant Accessibility access.")
+            Button("Grant Access in System Settings…") {
+                service.openSystemSettings()
+            }
+            .accessibilityHint("Opens the Accessibility pane of System Settings.")
+
+            Button("Permission Help…", action: onOpenSettings)
+                .accessibilityHint("Opens ButlerAI settings with instructions to grant Accessibility access.")
         }
     }
 }

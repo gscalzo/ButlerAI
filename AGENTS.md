@@ -82,12 +82,15 @@ ButlerAI is a macOS menubar app that improves selected text using AI. It runs wi
 
 ## Permissions & OS Integration
 - Requires **Accessibility** permissions for global key monitoring and clipboard events.
+- The app is sandboxed; the Accessibility prompt is drawn by the `com.apple.universalaccessAuthWarn` service, which the sandbox blocks unless it is listed in `com.apple.security.temporary-exception.mach-lookup.global-name` (it is, in `Butler.entitlements`). Without it the prompt silently never appears and users must add the app with “+”.
+- macOS (TCC) keys Accessibility rows by bundle ID and stores the code requirement of the *first* process that asked. The ad-hoc-signed unit-test host shares the bundle ID, so under tests the app uses `DeniedAccessibilityPermissionChecker` and never calls `AXIsProcessTrusted`. If the hotkey stops working after re-signing/reinstalling: `tccutil reset Accessibility uk.co.effectivecode.Butler`, relaunch the app, re-enable it in System Settings.
 - Uses `AXIsProcessTrustedWithOptions` for prompting and `NSEvent.addGlobalMonitorForEvents` for hotkey capture.
 
 ## Observed Quirks / Implementation Notes
 - GPT-5-family models reject `max_tokens`/`temperature` on Chat Completions — keep the parameter split in `OpenAIClient` when adding models.
 - Accessibility polling is intentionally cheap (2s, only while not granted) and stops itself once granted.
 - Modal alerts go through `AlertPresenter`.
+- Version: `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the pbxproj (app target); shown in the menubar menu via `AppInfo`. `Butler/Info.plist` is merged into the generated plist (`INFOPLIST_FILE`).
 
 ## Build & Test
 - Open `Butler.xcodeproj` in Xcode (deployment target macOS 15.2).
@@ -134,6 +137,7 @@ Use `Makefile` targets for common tasks:
 - `make test` (unit tests only, executes tests; `LOG_DIR=<dir>` overrides the log location, default `/tmp`)
 - `make test-build` (build-for-testing only)
 - `make build`
+- `make release` (signed Release build, automatic signing) / `make install` (build Release and replace `/Applications/Butler.app`; the old copy is moved to the Trash)
 - `make archive`
 - `make clean`
 

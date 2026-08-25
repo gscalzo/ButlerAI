@@ -29,6 +29,15 @@ struct SystemAccessibilityPermissionChecker: AccessibilityPermissionChecking {
     }
 }
 
+/// Checker that never touches the Accessibility API. Used when the app runs as a unit-test host:
+/// macOS keys Accessibility (TCC) rows by bundle ID and stores the code requirement of the first
+/// process that asked, so an ad-hoc-signed test host asking would poison the row for the real app.
+struct DeniedAccessibilityPermissionChecker: AccessibilityPermissionChecking {
+    func isTrusted() -> Bool { false }
+    @discardableResult func promptForTrust() -> Bool { false }
+    func openSystemSettings() {}
+}
+
 /// Observable source of truth for the app's Accessibility permission.
 ///
 /// The service reads the trust state on demand (`refresh()`), can trigger the system prompt

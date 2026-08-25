@@ -63,7 +63,7 @@ ButlerAI is an elegant macOS menubar application that helps you improve your wri
      - Choose from available local models
 
 2. **Required Permissions**:
-   - macOS will ask for **Accessibility** access on first launch; it is needed for the global shortcut and for copying/pasting the selection
+   - macOS asks for **Accessibility** access on first launch; it is needed for the global shortcut and for copying/pasting the selection. If no prompt appears and ButlerAI is not listed under Privacy & Security › Accessibility, click **+** there and choose ButlerAI from Applications (or drag it in from Finder)
    - You can check and fix this any time from **Settings → Permissions**: it shows whether access is granted and has one-click buttons to open System Settings, re-request access, or re-check
    - While access is missing, the menubar menu shows a warning banner with a "Fix…" shortcut to that tab
 

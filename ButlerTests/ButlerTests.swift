@@ -23,6 +23,11 @@ final class ButlerTests: XCTestCase {
         XCTAssertEqual(detected, "it")
     }
 
+    func testVersionDescriptionFormatting() {
+        XCTAssertEqual(AppInfo.versionDescription(version: "1.1.0", build: "2"), "Version 1.1.0 (2)")
+        XCTAssertTrue(AppInfo.versionDescription.hasPrefix("Version "))
+    }
+
     func testDetectLanguageNonItalianReturnsNil() {
         let service = LanguageService(textImprover: OpenAIClient(
             apiKey: "test-key",
