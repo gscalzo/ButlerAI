@@ -80,6 +80,14 @@ ButlerAI is a macOS menubar app that improves selected text using AI. It runs wi
 - `improvementPrompt`
 - `settingsSchemaVersion` — bump `currentSchemaVersion` and extend `migrateIfNeeded()` for one-time migrations (v2 split the legacy `selectedModel` and moved old default models to Luna).
 
+## Signing, Installing & Permissions (agent runbooks)
+`SIGNING.md` is written as step-by-step runbooks with expected outputs; follow it instead of improvising:
+- Environment check → `SIGNING.md` §2 (identities, team, entitlement, tests).
+- Build & install a signed app → Runbook A (`make install DEVELOPMENT_TEAM=<Team ID>`, then `make verify-signing`).
+- "Shortcut doesn't work" / Accessibility → Runbook B (log-driven; `tccutil reset` only when the log proves a stale row; granting is a **HUMAN** step — never toggle System Settings yourself).
+- Releases → Runbook C (manual Developer ID) / D (tag-triggered CI).
+Ground rules that bite agents: use `/usr/bin/log` (a `log` shell function may shadow it); `~/.Trash` and the TCC database are unreadable from the terminal; never run `make test` between `tccutil reset` and launching the app; never `rm` `/Applications/Butler.app` (`make install` moves it to the Trash).
+
 ## Permissions & OS Integration
 - Requires **Accessibility** permissions for global key monitoring and clipboard events.
 - The app is sandboxed; the Accessibility prompt is drawn by the `com.apple.universalaccessAuthWarn` service, which the sandbox blocks unless it is listed in `com.apple.security.temporary-exception.mach-lookup.global-name` (it is, in `Butler.entitlements`). Without it the prompt silently never appears and users must add the app with “+”.

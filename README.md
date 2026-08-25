@@ -141,13 +141,13 @@ make archive DEVELOPMENT_TEAM=<TEAM>   # Xcode archive, ready for -exportArchive
 
 Signing matters more than usual for this app: macOS binds the Accessibility permission to the app's
 code signature, and the sandboxed app can only show the permission prompt thanks to an entitlement
-exception. **[SIGNING.md](SIGNING.md)** covers everything in detail:
+exception. **[SIGNING.md](SIGNING.md)** covers everything as step-by-step runbooks (with expected outputs, so they can be followed by people or coding agents):
 
 - creating Apple Development / Developer ID certificates and finding your Team ID
 - local signed builds with `make install` (and why unsigned builds lose the Accessibility permission on every rebuild)
 - manual Developer ID archive → export → DMG → notarization → stapling
 - the GitHub Actions release workflow and the secrets it needs (`CERTIFICATE_BASE64`, `CERTIFICATE_PASSWORD`, `APPLE_DEVELOPER_ID`, `APPLE_DEVELOPER_PASSWORD`, `TEAM_ID`)
-- the entitlements and how to verify a signature; troubleshooting permissions
+- the entitlements, `make verify-signing`, and a symptom → cause → action failure table for permissions
 
 Releases are built, signed, notarized and published automatically when a version tag is pushed:
 

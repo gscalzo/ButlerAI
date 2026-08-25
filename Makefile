@@ -16,9 +16,10 @@ APP_NAME := Butler
 RELEASE_APP := $(DERIVED_DATA)/Build/Products/Release/$(APP_NAME).app
 INSTALL_DIR := /Applications
 TRASH_DIR := $(HOME)/.Trash
+APP ?= $(INSTALL_DIR)/$(APP_NAME).app
 XCODEBUILD_FILTER := rg -v "CoreSimulatorService connection became invalid|Logging connecton invalid|Error opening log file|SimServiceContext|simdiskimaged"
 
-.PHONY: help test test-build build release install archive clean
+.PHONY: help test test-build build release install verify-signing archive clean
 
 help:
 	@echo "Targets:"
@@ -27,6 +28,7 @@ help:
 	@echo "  make build    # Build app"
 	@echo "  make release  # Build a signed Release app into DerivedData"
 	@echo "  make install  # Build Release and replace $(INSTALL_DIR)/$(APP_NAME).app (quits the running app; old copy goes to the Trash)"
+	@echo "  make verify-signing [APP=path]  # Check signature, entitlements and TCC requirement of an app (default $(APP))"
 	@echo "  make archive  # Archive app"
 	@echo "  make clean    # Remove DerivedData and build artifacts"
 	@echo "Variables: LOG_DIR=<dir> (default /tmp) controls where xcodebuild logs are written"
@@ -61,6 +63,21 @@ install: release
 	fi
 	@ditto "$(RELEASE_APP)" "$(INSTALL_DIR)/$(APP_NAME).app"
 	@echo "installed: $(INSTALL_DIR)/$(APP_NAME).app ($$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$(INSTALL_DIR)/$(APP_NAME).app/Contents/Info.plist"))"
+
+verify-signing:
+	@test -d "$(APP)" || (echo "no app at $(APP)"; exit 1)
+	@out=$$(codesign --verify --deep --strict "$(APP)" 2>&1); status=$$?; \
+		if [ $$status -eq 0 ]; then echo "signature: valid"; \
+		elif echo "$$out" | grep -q "not signed"; then echo "signature: NONE (unsigned build — use make release/install, not make build)"; exit 1; \
+		else echo "signature: INVALID — $$out"; exit 1; fi
+	@codesign -dv --verbose=2 "$(APP)" 2>&1 | grep -E "^(Identifier|Authority|TeamIdentifier)=" | head -3
+	@codesign -d --entitlements :- "$(APP)" 2>/dev/null | plutil -p - | grep -q universalaccessAuthWarn \
+		&& echo "entitlements: accessibility prompt exception present" \
+		|| (echo "entitlements: MISSING com.apple.universalaccessAuthWarn exception (prompt will never appear)"; exit 1)
+	@if codesign -d -r- "$(APP)" 2>&1 | grep "designated" | grep -q cdhash; then \
+		echo "requirement: cdhash-only (ad-hoc build) — Accessibility permission will NOT survive rebuilds"; exit 1; \
+	else echo "requirement: certificate-based (Accessibility permission survives rebuilds)"; fi
+	@echo "version: $$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$(APP)/Contents/Info.plist") ($$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$(APP)/Contents/Info.plist"))"
 
 archive:
 	@$(XCODEBUILD_SIGNED) -configuration Release archive -archivePath $(ARCHIVE_PATH) 2>&1 | xcsift -w

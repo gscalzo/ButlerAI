@@ -1,235 +1,254 @@
-# Code Signing, Notarization & Installation
+# Code Signing, Notarization & Installation — Runbooks
 
-ButlerAI needs macOS **Accessibility** access (to watch the global shortcut and to paste the improved
-text). macOS ties that permission to the app's **code signature**, so how the app is signed decides
-whether the permission survives a rebuild, whether the system prompt appears at all, and whether other
-people can open the app you distribute. This document explains every signing path the project supports.
+Written to be executed by humans **or coding agents**. Every step is a shell command run from the
+repository root, followed by the expected result and what to do if it differs. Steps tagged
+**HUMAN** need a person (credentials, or a click inside System Settings): an agent must stop there,
+say exactly what the person has to do, and wait.
 
-- [Why signing matters for this app](#why-signing-matters-for-this-app)
-- [Prerequisites](#prerequisites)
-- [1. Local signed build (`make install`)](#1-local-signed-build-make-install)
-- [2. Developer ID release build (manual)](#2-developer-id-release-build-manual)
-- [3. Automated release (GitHub Actions)](#3-automated-release-github-actions)
-- [Entitlements explained](#entitlements-explained)
-- [Verifying a signature](#verifying-a-signature)
-- [Troubleshooting](#troubleshooting)
+Contents: [Ground rules](#0-ground-rules) · [Concepts](#1-concepts) · [Environment check](#2-environment-check) ·
+[A: Local signed build & install](#runbook-a--local-signed-build--install) ·
+[B: Accessibility permission / shortcut not working](#runbook-b--accessibility-permission--shortcut-not-working) ·
+[C: Developer ID release (manual)](#runbook-c--developer-id-release-manual) ·
+[D: Release via GitHub Actions](#runbook-d--release-via-github-actions) ·
+[Reference](#reference) · [Failure table](#failure-table)
 
-## Why signing matters for this app
+---
 
-1. **Accessibility permission is bound to the signature.** macOS (TCC) stores the app's *designated
-   requirement* when the permission row is created. For a certificate-signed build that requirement is
-   `identifier "<bundle id>" and anchor apple generic and certificate leaf = <your certificate>`, which
-   every future build made with the same certificate satisfies — the permission survives rebuilds and
-   reinstalls. An **ad-hoc/unsigned** build gets a `cdhash`-only requirement that matches exactly one
-   binary: every rebuild is a "new app" and the permission must be granted again.
-2. **The permission prompt needs a sandbox exception.** The app is sandboxed. The dialog that asks for
-   Accessibility access is drawn by the `com.apple.universalaccessAuthWarn` system service, which the
-   sandbox blocks unless it is listed in `com.apple.security.temporary-exception.mach-lookup.global-name`
-   (it is, in `Butler/Butler.entitlements`). Without it the prompt silently never appears and users have
-   to add the app by hand with **+** in System Settings.
-3. **Distribution needs Developer ID + notarization.** Gatekeeper only opens downloaded apps that are
-   signed with a *Developer ID Application* certificate and notarized by Apple. Locally built apps are
-   exempt (they are not quarantined), which is why a development-signed `make install` works on your own
-   machine but must not be shipped.
+## 0. Ground rules
 
-## Prerequisites
+1. Run every command from the repository root. Commands are non-interactive unless tagged **HUMAN**.
+2. Use `/usr/bin/log` (full path) for unified-log queries — a shell alias/function named `log` may shadow it and return nothing.
+3. `~/.Trash` and `~/Library/Application Support/com.apple.TCC/` are unreadable from a terminal without Full Disk Access. Do not try to read or edit the TCC database; use `tccutil` and the unified log instead.
+4. Never switch privacy toggles in System Settings on the user's behalf (no UI scripting of System Settings). Open the pane, then hand over.
+5. Never run `make test` (or any ad-hoc build) between `tccutil reset` and launching the real app — see [Concepts](#1-concepts) item 3.
+6. Do not delete `/Applications/Butler.app` with `rm`; `make install` moves the old copy to the Trash.
+7. Do not commit values from `ExportOptions.plist` or `DEVELOPMENT_TEAM` that belong to someone else's account; use placeholders in docs.
+8. Expected outputs below are patterns; team IDs, names and hashes will differ.
 
-- Xcode 16.2 or later with the command line tools (`xcode-select --install`).
-- An [Apple Developer Program](https://developer.apple.com/programs/) membership (required for
-  Developer ID and notarization; a free account is enough for local development signing).
-- Certificates in your login keychain:
-  - **Apple Development** — for local builds. Easiest: Xcode → Settings → Accounts → select your
-    account → *Manage Certificates…* → **+** → *Apple Development*.
-  - **Developer ID Application** — for builds you distribute. Same dialog → **+** → *Developer ID
-    Application* (the account holder must create it), or create it at
-    [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates)
-    using a CSR from Keychain Access (*Certificate Assistant → Request a Certificate From a Certificate
-    Authority…*).
-- Check what you have:
+## 1. Concepts
 
-  ```bash
-  security find-identity -v -p codesigning
-  ```
+1. **Accessibility permission is bound to the code signature.** macOS (TCC) records the app's *designated requirement* when the permission row is created. Certificate-signed builds have `identifier "<bundle id>" and anchor apple generic and certificate leaf = <certificate>`, so every rebuild with the same certificate keeps the permission.
+2. **Ad-hoc/unsigned builds lose it every time.** Their requirement is `cdhash H"…"` — one exact binary. Each rebuild is a new app to TCC.
+3. **TCC keys rows by bundle ID and binds each row to the first binary that asked.** The unit-test host is ad-hoc signed with the same bundle ID; if it touched the Accessibility API it would create/poison rows. The app therefore uses `DeniedAccessibilityPermissionChecker` under tests. Several rows with the same name can exist; only the one matching the running binary counts.
+4. **The prompt needs a sandbox exception.** The dialog is drawn by `com.apple.universalaccessAuthWarn`; the sandbox blocks it unless it is listed in `com.apple.security.temporary-exception.mach-lookup.global-name` (`Butler/Butler.entitlements`). Missing exception ⇒ no dialog, no row, user must add the app with **+**.
+5. **Distribution needs Developer ID + notarization.** Gatekeeper accepts downloaded apps only if Developer-ID-signed and notarized. Locally built apps are not quarantined, so a development-signed `make install` runs fine on the build machine but must not be shipped.
+6. **Signing identity precedence.** `make release/install/archive` use automatic signing with `DEVELOPMENT_TEAM` (command-line override > project setting). `make test/build` run with signing disabled (ad-hoc), on purpose, so they work without certificates.
 
-  You should see lines such as `"Apple Development: <name> (<id>)"` and
-  `"Developer ID Application: <name or company> (<TEAM_ID>)"`.
-- Your **Team ID** (10 characters): shown in parentheses in the Developer ID identity above, or under
-  *Membership details* on developer.apple.com.
+## 2. Environment check
 
-## 1. Local signed build (`make install`)
+Run all of these before any runbook; fix anything that does not match.
 
-The project uses **automatic signing**: Xcode picks an Apple Development certificate for the team set in
-the target's *Signing & Capabilities*. When you fork the project, use your own team:
+| # | Command | Expect | If not |
+| --- | --- | --- | --- |
+| 1 | `xcodebuild -version` | `Xcode 16.2` or newer | Install/select Xcode: `sudo xcode-select -s /Applications/Xcode.app` |
+| 2 | `which xcsift rg` | two paths | `brew install xcsift ripgrep` (needed by the Makefile) |
+| 3 | `security find-identity -v -p codesigning` | at least one `"Apple Development: …"` line; for releases also `"Developer ID Application: … (<TEAM_ID>)"` | **HUMAN**: create certificates (Xcode → Settings → Accounts → Manage Certificates… → +, or developer.apple.com). Agents cannot create certificates. |
+| 4 | `grep -m1 "DEVELOPMENT_TEAM" Butler.xcodeproj/project.pbxproj` | `DEVELOPMENT_TEAM = <10 chars>;` | Pass `DEVELOPMENT_TEAM=<Team ID>` to make targets (the ID is the value in parentheses in step 3), or set the team in Xcode → target Butler → Signing & Capabilities |
+| 5 | `grep -c universalaccessAuthWarn Butler/Butler.entitlements` | `1` | Re-add the exception (see [Reference → Entitlements](#entitlements)) |
+| 6 | `make test LOG_DIR=./.logs 2>&1 \| tail -3` | `"status" : "success"` and `tests_run: N` | Fix the build/tests first (AGENTS.md rules) |
 
-- **Xcode:** open `Butler.xcodeproj` → target *Butler* → *Signing & Capabilities* → set *Team*, or
-- **Command line:** pass your Team ID to the Makefile targets, which forwards it as `DEVELOPMENT_TEAM`:
+## Runbook A — Local signed build & install
 
-  ```bash
-  make release DEVELOPMENT_TEAM=ABCDE12345   # signed Release build in ./DerivedData/Build/Products/Release/Butler.app
-  make install DEVELOPMENT_TEAM=ABCDE12345   # same, then replaces /Applications/Butler.app (old copy → Trash)
-  ```
+**Goal:** a certificate-signed Release build at `/Applications/Butler.app`, launched, with the Accessibility prompt shown.
 
-  Without `DEVELOPMENT_TEAM=` the team stored in the project file is used.
+1. Build and install (`DEVELOPMENT_TEAM=` optional if the project's team matches an identity from check 3):
+   ```bash
+   make install DEVELOPMENT_TEAM=<TEAM_ID> LOG_DIR=./.logs 2>&1 | tail -6
+   ```
+   Expect the last lines: `built: ./DerivedData/Build/Products/Release/Butler.app (<version>)`, optionally `moved previous app to …/.Trash`, `installed: /Applications/Butler.app (<version>)`.
+   If `"status" : "failed"` appears, read `./.logs/butler_make_release.log`; signing errors mention "No signing certificate" / "doesn't match" — see the [Failure table](#failure-table).
+2. Verify the installed app:
+   ```bash
+   make verify-signing
+   ```
+   Expect `signature: valid`, an `Authority=Apple Development: …` (or `Developer ID Application: …`) line, `entitlements: accessibility prompt exception present`, `requirement: certificate-based …`, and the version. Any `MISSING`/`INVALID`/`cdhash-only` line means stop and fix (the target exits non-zero).
+3. Launch and confirm the permission flow started:
+   ```bash
+   open -a /Applications/Butler.app; sleep 5
+   tail -n 15 ~/Library/Containers/uk.co.effectivecode.Butler/Data/Library/Logs/ButlerAI.log
+   ```
+   Expect, in order: `Accessibility permission service initialized (granted: false|true)`, and if false: `Requesting accessibility access from macOS`, `Started polling accessibility permission every 2.0s`, `Setting up hotkey (⌃⌥⌘C)`.
+   - If `granted: true` → done (`Registering global hotkey` follows within a second).
+   - If `granted: false` → continue with Runbook B step 3 (the prompt should be on screen).
 
-`make install` quits a running ButlerAI, moves the previous `/Applications/Butler.app` to the Trash,
-copies the new build in with `ditto` (preserving the signature) and prints the installed version.
-Launch it from `/Applications`; on first launch macOS shows the Accessibility prompt — click *Open
-System Settings* and switch **Butler** on. Because the signature is certificate-based, later
-`make install` runs keep the permission.
+## Runbook B — Accessibility permission / shortcut not working
 
-If you also change the **bundle identifier** (`PRODUCT_BUNDLE_IDENTIFIER`), do it before granting
-permissions: TCC rows, the sandbox container (`~/Library/Containers/<bundle id>`) and the log file
-location are all keyed by it.
+**Goal:** the running `/Applications/Butler.app` is trusted for Accessibility, so ⌃⌥⌘C fires.
 
-> `make test` deliberately builds with code signing **disabled** so it runs on machines without
-> certificates. The resulting ad-hoc test host shares the bundle identifier, which is why the app never
-> touches the Accessibility API when running as a test host (`DeniedAccessibilityPermissionChecker`).
+1. Diagnose from the app log (no guessing):
+   ```bash
+   grep -E "initialized \(granted|Requesting|granted|Registering|removed" \
+     ~/Library/Containers/uk.co.effectivecode.Butler/Data/Library/Logs/ButlerAI.log | tail -5
+   ```
+   - Last `initialized (granted: true)` / `Accessibility permission granted` + `Registering global hotkey` → permission is fine; the problem is elsewhere (selection empty, API key, network — check the rest of the log).
+   - `granted: false` and no later `granted` line → continue.
+2. Check that the installed build can prompt and has a stable requirement:
+   ```bash
+   make verify-signing
+   ```
+   If it reports a missing `universalaccessAuthWarn` exception or a `cdhash-only` requirement, rebuild with Runbook A first, then return here.
+3. Confirm what macOS did with the request (last launch):
+   ```bash
+   /usr/bin/log show --last 10m --info --debug --style compact --predicate 'process == "tccd"' \
+     | grep "uk.co.effectivecode.Butler" | grep -E "Handling access request|AUTHREQ_RESULT" | tail -4
+   /usr/bin/log show --last 10m --style compact --predicate 'process == "kernel" AND eventMessage CONTAINS "Butler" AND eventMessage CONTAINS "deny"' | tail -3
+   ```
+   - A `deny(1) mach-lookup com.apple.universalaccessAuthWarn` line → the running build lacks the entitlement exception (step 2).
+   - `AUTHREQ_RESULT … authValue=1` with no deny → the prompt was shown; the row exists but is off, or the user dismissed the dialog.
+   - `authValue=2` → allowed; if the app still logs `granted: false`, the row is bound to another binary (step 4).
+4. Reset stale rows and re-prompt (only when steps 1–3 show the row is missing/mismatched). Do **not** run `make test` between these two commands:
+   ```bash
+   pkill -x Butler; sleep 2
+   tccutil reset Accessibility uk.co.effectivecode.Butler
+   open -a /Applications/Butler.app; sleep 5
+   ```
+   Expect `Successfully reset Accessibility approval status for uk.co.effectivecode.Butler` (printed once per removed row) and, in the app log, `Requesting accessibility access from macOS`.
+5. **HUMAN** — grant the permission. Open the pane for the person:
+   ```bash
+   open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+   ```
+   Tell them: *"Switch **Butler** on under Privacy & Security › Accessibility. If it is not listed, click **+** and choose /Applications/Butler.app (or drag it in from Finder). If it is listed and already on, switch it off and on."* Do not toggle it yourself.
+6. Confirm (the app polls every 2 s, no relaunch needed):
+   ```bash
+   sleep 5; grep -E "permission granted|Registering global hotkey" \
+     ~/Library/Containers/uk.co.effectivecode.Butler/Data/Library/Logs/ButlerAI.log | tail -2
+   ```
+   Expect both lines. Then ask the person to select text and press ⌃⌥⌘C.
 
-## 2. Developer ID release build (manual)
+## Runbook C — Developer ID release (manual)
 
-This is what the CI does; run it by hand when you need a distributable build locally.
+**Goal:** a notarized, stapled `build/ButlerAI.dmg` identical to what CI produces. Needs a `Developer ID Application` identity (check 3).
 
-1. **Configure export options.** Edit `ExportOptions.plist` and set your values:
-
+1. Set the export options (edit `ExportOptions.plist`; keep `method`/`signingStyle`):
    ```xml
-   <key>method</key>             <string>developer-id</string>
    <key>teamID</key>             <string>YOUR_TEAM_ID</string>
-   <key>signingStyle</key>       <string>manual</string>
    <key>signingCertificate</key> <string>Developer ID Application: Your Name or Company</string>
    ```
-
-   `signingCertificate` must match the certificate's common name exactly as printed by
-   `security find-identity` (without the `(TEAM_ID)` suffix).
-
-2. **Archive** with the Developer ID identity:
-
+   `signingCertificate` must equal the identity's common name from check 3 **without** the `(TEAM_ID)` suffix.
+2. Archive:
    ```bash
    xcodebuild -project Butler.xcodeproj -scheme Butler -configuration Release \
      -archivePath build/Butler.xcarchive archive \
-     DEVELOPMENT_TEAM="YOUR_TEAM_ID" \
-     CODE_SIGN_IDENTITY="Developer ID Application" \
-     CODE_SIGN_STYLE=Manual
+     DEVELOPMENT_TEAM="YOUR_TEAM_ID" CODE_SIGN_IDENTITY="Developer ID Application" CODE_SIGN_STYLE=Manual \
+     2>&1 | xcsift -w | tail -6
    ```
-
-3. **Export** the signed app from the archive:
-
+   Expect `"status" : "success"` and `build/Butler.xcarchive` to exist.
+3. Export:
    ```bash
-   xcodebuild -exportArchive \
-     -archivePath build/Butler.xcarchive \
-     -exportPath build/export \
-     -exportOptionsPlist ExportOptions.plist
+   xcodebuild -exportArchive -archivePath build/Butler.xcarchive -exportPath build/export \
+     -exportOptionsPlist ExportOptions.plist 2>&1 | tail -5
    ```
-
-   The app is now at `build/export/Butler.app`, signed with hardened runtime and the entitlements from
-   `Butler/Butler.entitlements`.
-
-4. **Package** it as a DMG:
-
+   Expect `EXPORT SUCCEEDED` and `build/export/Butler.app`.
+4. Verify the exported app:
+   ```bash
+   make verify-signing APP=build/export/Butler.app
+   codesign -dv --verbose=2 build/export/Butler.app 2>&1 | grep -E "Authority=Developer ID Application|flags=.*runtime"
+   ```
+   Expect both grep lines (Developer ID authority, hardened `runtime` flag).
+5. Package:
    ```bash
    hdiutil create -volname "ButlerAI" -srcfolder build/export/Butler.app -ov -format UDZO build/ButlerAI.dmg
    ```
-
-5. **Notarize and staple.** Store your credentials once (uses an
-   [app-specific password](https://support.apple.com/en-us/102654), never your Apple ID password):
-
+6. **HUMAN** — notarization credentials. Ask the person to run once (an app-specific password, never the Apple ID password):
    ```bash
-   xcrun notarytool store-credentials "butler-notary" \
-     --apple-id "you@example.com" --team-id "YOUR_TEAM_ID" --password "xxxx-xxxx-xxxx-xxxx"
-   xcrun notarytool submit build/ButlerAI.dmg --keychain-profile "butler-notary" --wait
+   xcrun notarytool store-credentials "butler-notary" --apple-id "you@example.com" --team-id "YOUR_TEAM_ID" --password "xxxx-xxxx-xxxx-xxxx"
+   ```
+   Agents must not ask for or store the password themselves.
+7. Notarize and staple:
+   ```bash
+   xcrun notarytool submit build/ButlerAI.dmg --keychain-profile "butler-notary" --wait 2>&1 | tail -4
    xcrun stapler staple build/ButlerAI.dmg
    ```
-
-   If notarization fails, fetch the report with
-   `xcrun notarytool log <submission-id> --keychain-profile "butler-notary"`.
-
-6. **Verify** before publishing (see [Verifying a signature](#verifying-a-signature)):
-
+   Expect `status: Accepted` then `The staple and validate action worked!`. On `status: Invalid`: `xcrun notarytool log <submission-id> --keychain-profile "butler-notary"` and fix the listed issues (usually a missing hardened runtime or an unsigned nested binary).
+8. Final check:
    ```bash
    spctl --assess --type open --context context:primary-signature -v build/ButlerAI.dmg
    ```
+   Expect `accepted` and `source=Notarized Developer ID`.
 
-## 3. Automated release (GitHub Actions)
+## Runbook D — Release via GitHub Actions
 
-`.github/workflows/release.yml` performs steps 2–5 on every pushed tag matching `v*`, and attaches the
-notarized DMG to a GitHub release. It needs these repository **secrets** (Settings → Secrets and
-variables → Actions):
+`.github/workflows/release.yml` runs Runbook C steps 2–7 on every pushed tag matching `v*` and attaches the DMG to a GitHub release.
 
-| Secret | Value | How to obtain it |
+1. Repository secrets (Settings → Secrets and variables → Actions). **HUMAN** for all values:
+
+   | Secret | Value | How the person obtains it |
+   | --- | --- | --- |
+   | `CERTIFICATE_BASE64` | Developer ID Application certificate + private key, base64 `.p12` | Keychain Access → My Certificates → right-click the certificate → Export… → `.p12` with a password; then `base64 -i Certificates.p12 \| pbcopy` |
+   | `CERTIFICATE_PASSWORD` | password chosen at export | — |
+   | `APPLE_DEVELOPER_ID` | Apple ID email used for notarization | — |
+   | `APPLE_DEVELOPER_PASSWORD` | app-specific password for that Apple ID | account.apple.com → Sign-In and Security → App-Specific Passwords |
+   | `TEAM_ID` | 10-character Team ID | developer.apple.com → Membership details |
+
+   `ExportOptions.plist` (`teamID`, `signingCertificate`) must match the same certificate — it is read from the repository.
+2. Version: `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` live in `Butler.xcodeproj/project.pbxproj` (app target). Bump both (build number must increase) and make sure the tag matches `MARKETING_VERSION`:
+   ```bash
+   grep -E "MARKETING_VERSION|CURRENT_PROJECT_VERSION" Butler.xcodeproj/project.pbxproj | sort -u
+   ```
+3. Tag and push (after the version bump is committed):
+   ```bash
+   git tag v<MARKETING_VERSION>
+   git push origin v<MARKETING_VERSION>
+   ```
+4. Watch the run (`gh run watch` or the Actions tab). Expect a green run and a release with `ButlerAI.dmg`. On failure, the job log lines prefixed `[BUTLER]` name the failing stage (build / export / notarize / staple).
+
+## Reference
+
+### Makefile targets and variables
+
+| Target | Signing | Output |
 | --- | --- | --- |
-| `CERTIFICATE_BASE64` | Developer ID Application certificate + private key as base64 `.p12` | Keychain Access → *My Certificates* → right-click the *Developer ID Application* certificate → *Export…* → format `.p12`, choose a password. Then `base64 -i Certificates.p12 \| pbcopy`. |
-| `CERTIFICATE_PASSWORD` | The password chosen during the `.p12` export | — |
-| `APPLE_DEVELOPER_ID` | The Apple ID (email) used for notarization | — |
-| `APPLE_DEVELOPER_PASSWORD` | An **app-specific password** for that Apple ID | [account.apple.com](https://account.apple.com) → *Sign-In and Security* → *App-Specific Passwords*. |
-| `TEAM_ID` | Your 10-character Team ID | developer.apple.com → *Membership details*. |
+| `make test` | disabled (ad-hoc) | runs unit tests; `tests_run: N` |
+| `make build` | disabled (ad-hoc) | Debug app in `DerivedData` |
+| `make release` | automatic | `DerivedData/Build/Products/Release/Butler.app` |
+| `make install` | automatic | replaces `/Applications/Butler.app`; old copy → Trash |
+| `make archive` | automatic | `build/Butler.xcarchive` |
+| `make verify-signing [APP=path]` | — | prints signature/entitlement/requirement/version checks; non-zero exit on any problem |
 
-Also update `ExportOptions.plist` (`teamID`, `signingCertificate`) to match your certificate — the
-export step reads it from the repository.
+Variables: `DEVELOPMENT_TEAM=<Team ID>` (signing team), `LOG_DIR=<dir>` (xcodebuild logs, default `/tmp`), `APP=<path>` (for `verify-signing`, default `/Applications/Butler.app`).
 
-Cut a release with:
+### Entitlements
 
-```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-## Entitlements explained
-
-`Butler/Butler.entitlements` (applied to every signed build):
+`Butler/Butler.entitlements`, applied to every signed build (`ENABLE_HARDENED_RUNTIME = YES` in the project is required for notarization):
 
 | Entitlement | Why |
 | --- | --- |
-| `com.apple.security.app-sandbox` | The app runs sandboxed. |
-| `com.apple.security.network.client` | Calls the OpenAI API / a local Ollama server. |
-| `com.apple.security.network.server` | Historical; kept for compatibility with existing installs. |
-| `com.apple.security.files.user-selected.read-only` | Standard sandbox file access. |
-| `com.apple.security.automation.apple-events` + temporary exception for `com.apple.systemevents` | Apple Events automation. |
-| `com.apple.security.temporary-exception.mach-lookup.global-name` → `com.apple.coreservices.launchservicesd` | Launch Services lookups from the sandbox. |
-| `com.apple.security.temporary-exception.mach-lookup.global-name` → `com.apple.universalaccessAuthWarn` | Lets the sandboxed app **show the Accessibility permission prompt** (see above). |
+| `com.apple.security.app-sandbox` | App is sandboxed |
+| `com.apple.security.network.client` | OpenAI API / local Ollama |
+| `com.apple.security.network.server` | historical, kept for existing installs |
+| `com.apple.security.files.user-selected.read-only` | standard sandbox file access |
+| `com.apple.security.automation.apple-events` + temporary exception `com.apple.systemevents` | Apple Events automation |
+| mach-lookup exception `com.apple.coreservices.launchservicesd` | Launch Services from the sandbox |
+| mach-lookup exception `com.apple.universalaccessAuthWarn` | **shows the Accessibility permission prompt** (Concepts 4) |
 
-`ENABLE_HARDENED_RUNTIME = YES` is set in the project; it is required for notarization.
-
-## Verifying a signature
+### Verification commands
 
 ```bash
-codesign -dv --verbose=2 /Applications/Butler.app       # identity, team, hardened runtime flags
-codesign --verify --deep --strict /Applications/Butler.app && echo OK
-codesign -d --entitlements :- /Applications/Butler.app | plutil -p -   # entitlements actually embedded
-codesign -d -r- /Applications/Butler.app                # designated requirement (what TCC binds to)
-spctl --assess --type execute -v /Applications/Butler.app   # Gatekeeper verdict: "accepted" only for notarized Developer ID builds
+codesign --verify --deep --strict /Applications/Butler.app && echo OK   # integrity
+codesign -dv --verbose=2 /Applications/Butler.app                       # Identifier=, Authority=, TeamIdentifier=, flags=
+codesign -d --entitlements :- /Applications/Butler.app | plutil -p -    # embedded entitlements
+codesign -d -r- /Applications/Butler.app                                # designated requirement (what TCC binds to)
+spctl --assess --type execute -v /Applications/Butler.app               # "accepted" only for notarized Developer ID builds; "rejected" is normal for local dev builds
 ```
 
-A development-signed local build is expected to be `rejected` by `spctl` — Gatekeeper only vets
-downloaded (quarantined) apps, so this does not affect running it locally.
+### Where things are
 
-## Troubleshooting
+- App log: `~/Library/Containers/uk.co.effectivecode.Butler/Data/Library/Logs/ButlerAI.log` (also *Show Logs* in the menubar menu)
+- TCC decisions: `/usr/bin/log show --last 10m --info --debug --predicate 'process == "tccd"' | grep uk.co.effectivecode.Butler`
+- Sandbox denials: `/usr/bin/log show --last 10m --predicate 'process == "kernel" AND eventMessage CONTAINS "Butler"'`
+- Bundle identifier: `uk.co.effectivecode.Butler` (`PRODUCT_BUNDLE_IDENTIFIER`); changing it also changes the container path, log path and TCC rows
 
-**"No signing certificate … found" / `errSecInternalComponent`** — run `security find-identity -v -p codesigning`;
-if the identity is missing, create it (Prerequisites). If it is listed but signing still fails in a
-script, the keychain is locked: `security unlock-keychain ~/Library/Keychains/login.keychain-db`.
+## Failure table
 
-**The shortcut stops working after rebuilding or re-signing** — the Accessibility row is bound to the old
-signature. Reset it and let the app prompt again:
-
-```bash
-tccutil reset Accessibility uk.co.effectivecode.Butler   # use your bundle id if you changed it
-open -a /Applications/Butler.app
-```
-
-Then enable *Butler* in System Settings → Privacy & Security → Accessibility. The menubar menu also
-offers *Grant Access in System Settings…* and *Permission Help…* while access is missing.
-
-**No prompt appears and the app is not listed under Accessibility** — the build lacks the
-`com.apple.universalaccessAuthWarn` exception (check with `codesign -d --entitlements :-`), or you
-launched an ad-hoc build. Either add the app manually with **+** (or drag it from Finder into the
-list) or rebuild with the project's entitlements.
-
-**Several rows for the app, or a row that is "on" but has no effect** — each differently-signed binary
-(release, local dev build, test host) creates its own row for the same bundle id; only the one matching
-the running binary counts. `tccutil reset Accessibility <bundle id>` removes them all; relaunch the app
-you actually use and enable that row.
-
-**Diagnosing** — the app writes its log to
-`~/Library/Containers/uk.co.effectivecode.Butler/Data/Library/Logs/ButlerAI.log` (also visible in
-*Show Logs* in the menubar menu). TCC's own decisions are in the unified log:
-`/usr/bin/log show --last 5m --info --debug --predicate 'process == "tccd"' | grep -i butler`
-(use the full path in case a shell alias shadows `log`).
+| Symptom | Cause | Action |
+| --- | --- | --- |
+| `No signing certificate "Mac Development" found` / `doesn't match any valid certificate` | no identity for the team | Check 3; pass the right `DEVELOPMENT_TEAM=`; **HUMAN** creates the certificate |
+| `errSecInternalComponent` while signing in a script | keychain locked | `security unlock-keychain ~/Library/Keychains/login.keychain-db` (**HUMAN** enters the password) |
+| `make verify-signing` → `requirement: cdhash-only` | build was ad-hoc (signing disabled) | rebuild with `make install` (not `make build`) |
+| `make verify-signing` → `MISSING com.apple.universalaccessAuthWarn` | entitlement exception removed | restore it in `Butler/Butler.entitlements`, rebuild |
+| App log `granted: false` forever after enabling in System Settings | row bound to another binary (test host / old signature) | Runbook B step 4, then **HUMAN** step 5 |
+| No prompt and app not listed under Accessibility | sandbox blocked the prompt, or ad-hoc build | Runbook B steps 2–3; fallback: **HUMAN** adds the app with **+** |
+| `spctl … rejected` for a local build | not notarized | expected for development builds; only relevant for distributed DMGs |
+| `notarytool` → `status: Invalid` | hardened runtime off, unsigned nested code, or bad entitlements | `notarytool log <id>`; fix; re-run Runbook C from step 2 |
+| `log show` prints nothing / "too many arguments" | shell function shadows `log` | use `/usr/bin/log` |
+| `hdiutil: … Resource busy` | DMG still mounted | `hdiutil detach /Volumes/ButlerAI` then retry |
