@@ -137,7 +137,7 @@ Use `Makefile` targets for common tasks:
 - `make test` (unit tests only, executes tests; `LOG_DIR=<dir>` overrides the log location, default `/tmp`)
 - `make test-build` (build-for-testing only)
 - `make build`
-- `make release` (signed Release build, automatic signing) / `make install` (build Release and replace `/Applications/Butler.app`; the old copy is moved to the Trash)
+- `make release` (signed Release build, automatic signing) / `make install` (build Release and replace `/Applications/Butler.app`; the old copy is moved to the Trash). Add `DEVELOPMENT_TEAM=<Team ID>` to sign with another team. Signing, notarization and the CI release flow are documented in `SIGNING.md`.
 - `make archive`
 - `make clean`
 

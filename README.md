@@ -130,33 +130,31 @@ Built with:
 ### Building & Testing
 
 ```bash
-make test         # run unit tests (LOG_DIR=<dir> to redirect xcodebuild logs, default /tmp)
-make build        # build the app
-make archive      # archive the app
+make test                              # run unit tests (LOG_DIR=<dir> to redirect xcodebuild logs, default /tmp)
+make build                             # unsigned debug build
+make release DEVELOPMENT_TEAM=<TEAM>   # signed Release build (your Apple Developer Team ID)
+make install DEVELOPMENT_TEAM=<TEAM>   # build + replace /Applications/Butler.app (old copy goes to the Trash)
+make archive DEVELOPMENT_TEAM=<TEAM>   # Xcode archive, ready for -exportArchive
 ```
 
-### Building Releases
+### Code Signing & Releases
 
-Releases are automatically built and signed when pushing version tags:
+Signing matters more than usual for this app: macOS binds the Accessibility permission to the app's
+code signature, and the sandboxed app can only show the permission prompt thanks to an entitlement
+exception. **[SIGNING.md](SIGNING.md)** covers everything in detail:
 
-1. **Required Secrets**:
-   - `CERTIFICATE_BASE64`: Developer ID Application certificate
-   - `CERTIFICATE_PASSWORD`: Certificate export password
-   - `APPLE_DEVELOPER_ID`: Apple ID email
-   - `APPLE_DEVELOPER_PASSWORD`: App-specific password
-   - `TEAM_ID`: Apple Developer Team ID
+- creating Apple Development / Developer ID certificates and finding your Team ID
+- local signed builds with `make install` (and why unsigned builds lose the Accessibility permission on every rebuild)
+- manual Developer ID archive → export → DMG → notarization → stapling
+- the GitHub Actions release workflow and the secrets it needs (`CERTIFICATE_BASE64`, `CERTIFICATE_PASSWORD`, `APPLE_DEVELOPER_ID`, `APPLE_DEVELOPER_PASSWORD`, `TEAM_ID`)
+- the entitlements and how to verify a signature; troubleshooting permissions
 
-2. **Creating a Release**:
-   ```bash
-   git tag v1.0.0  # Use appropriate version
-   git push origin v1.0.0
-   ```
+Releases are built, signed, notarized and published automatically when a version tag is pushed:
 
-The GitHub Action will automatically:
-- Build the app
-- Sign with Developer ID
-- Create notarized DMG
-- Create GitHub release
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
 
 ## License 📄
 

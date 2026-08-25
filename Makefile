@@ -8,8 +8,10 @@ TEST_BUILD_LOG := $(LOG_DIR)/butler_make_test_build.log
 BUILD_LOG := $(LOG_DIR)/butler_make_build.log
 
 XCODEBUILD_BASE := OS_ACTIVITY_MODE=disable xcodebuild -scheme $(SCHEME) -project $(PROJECT) -destination 'platform=macOS' -derivedDataPath $(DERIVED_DATA) CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=
-# Signed build (automatic signing with the project's team) for local installs.
-XCODEBUILD_SIGNED := OS_ACTIVITY_MODE=disable xcodebuild -scheme $(SCHEME) -project $(PROJECT) -destination 'platform=macOS' -derivedDataPath $(DERIVED_DATA)
+# Signed build (automatic signing). Pass DEVELOPMENT_TEAM=<your Team ID> to sign with your own team;
+# without it the team stored in the project file is used. See SIGNING.md.
+SIGNING_OVERRIDES := $(if $(DEVELOPMENT_TEAM),DEVELOPMENT_TEAM=$(DEVELOPMENT_TEAM),)
+XCODEBUILD_SIGNED := OS_ACTIVITY_MODE=disable xcodebuild -scheme $(SCHEME) -project $(PROJECT) -destination 'platform=macOS' -derivedDataPath $(DERIVED_DATA) $(SIGNING_OVERRIDES)
 APP_NAME := Butler
 RELEASE_APP := $(DERIVED_DATA)/Build/Products/Release/$(APP_NAME).app
 INSTALL_DIR := /Applications
@@ -28,6 +30,7 @@ help:
 	@echo "  make archive  # Archive app"
 	@echo "  make clean    # Remove DerivedData and build artifacts"
 	@echo "Variables: LOG_DIR=<dir> (default /tmp) controls where xcodebuild logs are written"
+	@echo "           DEVELOPMENT_TEAM=<Team ID> signs release/install/archive with your team (see SIGNING.md)"
 
 test:
 	@mkdir -p $(LOG_DIR)
@@ -60,7 +63,8 @@ install: release
 	@echo "installed: $(INSTALL_DIR)/$(APP_NAME).app ($$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$(INSTALL_DIR)/$(APP_NAME).app/Contents/Info.plist"))"
 
 archive:
-	@$(XCODEBUILD_BASE) archive -archivePath $(ARCHIVE_PATH) 2>&1 | xcsift -w
+	@$(XCODEBUILD_SIGNED) -configuration Release archive -archivePath $(ARCHIVE_PATH) 2>&1 | xcsift -w
+	@echo "archived: $(ARCHIVE_PATH) — export with xcodebuild -exportArchive (see SIGNING.md)"
 
 clean:
 	@rm -rf $(DERIVED_DATA) ./build
