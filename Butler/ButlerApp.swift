@@ -258,12 +258,42 @@ struct StatusIcon: View {
     }
 }
 
+/// Opens the app's windows (Settings, Logs) from the menubar menu.
+///
+/// ButlerAI is an accessory app (`LSUIElement`), so it is *not* the active application when one
+/// of its menu items is clicked. AppKit then orders a window opened from that click *beneath* the
+/// frontmost app's windows (unified log: "ordered front from a non-active application and may
+/// order beneath the active application's windows"), which made Settings and Logs look as if they
+/// never opened.
+///
+/// Activating the app fixes that and gives the window keyboard focus, but under macOS's
+/// cooperative activation model `NSApp.activate()` is only a request that is fulfilled
+/// asynchronously (if at all), so the app's windows are additionally ordered front regardless
+/// of activation to guarantee they are visible.
+@MainActor
+struct MenuWindowOpener {
+    var activateApp: @MainActor () -> Void = { NSApp.activate() }
+    var bringWindowsToFront: @MainActor () -> Void = {
+        for window in NSApp.windows where window.isVisible && window.level == .normal {
+            window.orderFrontRegardless()
+        }
+    }
+
+    func open(_ showWindow: () -> Void) {
+        activateApp()
+        showWindow()
+        // Raise on the next run-loop turn so a window SwiftUI creates for this call is included.
+        DispatchQueue.main.async { bringWindowsToFront() }
+    }
+}
+
 struct MenuContentView: View {
     @ObservedObject var appState: AppState
     @ObservedObject private var settings: SettingsService
     @ObservedObject private var permissions: AccessibilityPermissionService
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
+    private let windowOpener = MenuWindowOpener()
 
     init(appState: AppState) {
         _appState = ObservedObject(wrappedValue: appState)
@@ -301,8 +331,7 @@ struct MenuContentView: View {
                     // Call the SwiftUI action directly: the menu is flattened into NSMenu items,
                     // so nothing here can rely on onAppear having run.
                     appState.settingsTab = .permissions
-                    openSettings()
-                    NSApp.activate()
+                    windowOpener.open { openSettings() }
                 }
 
                 Divider()
@@ -321,14 +350,14 @@ struct MenuContentView: View {
 
             Button("Show Logs") {
                 log("Opening logs from menu")
-                openWindow(id: "logs")
+                windowOpener.open { openWindow(id: "logs") }
             }
             .keyboardShortcut("l")
             .padding(.vertical, 4)
 
             Button("Settings...") {
                 log("Opening settings from menu")
-                openSettings()
+                windowOpener.open { openSettings() }
             }
             .keyboardShortcut(",")
             .padding(.vertical, 4)

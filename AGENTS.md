@@ -98,6 +98,7 @@ Ground rules that bite agents: use `/usr/bin/log` (a `log` shell function may sh
 - GPT-5-family models reject `max_tokens`/`temperature` on Chat Completions — keep the parameter split in `OpenAIClient` when adding models.
 - Accessibility polling is intentionally cheap (2s, only while not granted) and stops itself once granted.
 - Modal alerts go through `AlertPresenter`.
+- The app is an accessory (`LSUIElement`), so it is **not** the active app when a menubar menu item is clicked, and AppKit orders any window it opens *beneath* the frontmost app's windows (the window exists but is invisible — a silent failure). Every window opened from the menu must go through `MenuWindowOpener`, which activates the app first.
 - Version: `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in the pbxproj (app target); shown in the menubar menu via `AppInfo`. `Butler/Info.plist` is merged into the generated plist (`INFOPLIST_FILE`).
 
 ## Build & Test
